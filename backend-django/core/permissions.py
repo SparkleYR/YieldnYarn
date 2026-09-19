@@ -85,9 +85,18 @@ class IsListingOwnerOrReadOnly(permissions.BasePermission):
 
 
 class IsOwnerOrAdmin(permissions.BasePermission):
-    """Generic: object must have a `.user` or `.buyer` FK owner, or be admin."""
+    """Generic: object must have a `.user`/`.buyer`/`.raised_by`/`.against`
+    FK owner, or be admin.
 
-    owner_fields = ("user_id", "buyer_id", "raised_by_id")
+    `against_id` matters for disputes specifically: `DisputeViewSet.get_queryset()`
+    already scopes the list to `Q(raised_by=user) | Q(against=user))`, so the
+    party a dispute was raised against needs to pass this same check on
+    retrieve/update — otherwise they can see their dispute in the list but
+    get a 403 opening it, which defeats the point of including them in the
+    queryset at all.
+    """
+
+    owner_fields = ("user_id", "buyer_id", "raised_by_id", "against_id")
 
     def has_object_permission(self, request, view, obj):
         user = request.user

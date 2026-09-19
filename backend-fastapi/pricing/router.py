@@ -16,6 +16,8 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from db import GradingResult, Listing, PricePoint, PricingRule, Vertical, get_db
+from grading.grade import derive_grade
+from grading.lookup import get_grading_schema_attributes
 from pricing.service import apply_adjustments
 
 router = APIRouter(prefix="/compute/pricing", tags=["pricing"])
@@ -88,11 +90,13 @@ def adjusted_price(listing_id: int = Query(...), db: Session = Depends(get_db)):
             .scalars()
             .first()
         )
-        # TODO: derive an actual letter grade from attribute_scores once that
-        # contract is finalized (§3.1 doesn't define a single top-level
-        # `grade` field on listings/grading_results). Grade-adjustment is
-        # skipped (multiplier 1.0) until then.
-        grade = None
+        # See grading/grade.py:derive_grade (§12) — grade is None (multiplier
+        # 1.0, no adjustment) if the listing hasn't been graded yet, or its
+        # attribute_scores don't overlap a weighted schema attribute.
+        schema_attributes = get_grading_schema_attributes(db, listing.vertical_id)
+        grade, _grade_score = derive_grade(
+            latest_grading.attribute_scores if latest_grading else None, schema_attributes
+        )
         adjusted = apply_adjustments(base, rule.rules if rule else None, grade, listing.quantity)
     except SQLAlchemyError as exc:
         raise HTTPException(status_code=503, detail=f"Database not ready: {exc}") from exc

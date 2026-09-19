@@ -222,3 +222,17 @@ SIMPLE_JWT = {
 CORS_ALLOWED_ORIGINS = env_list(
     "CORS_ALLOWED_ORIGINS", "http://localhost:3000"
 )
+
+# Base URL of the FastAPI compute service (grading/pricing/matching).
+FASTAPI_BASE_URL = env("FASTAPI_BASE_URL", "http://localhost:8001")
+
+# Base URL of the Next.js web app — used to build the link inside a
+# password-reset email (accounts/views.py:PasswordResetRequestView).
+FRONTEND_URL = env("FRONTEND_URL", "http://localhost:3000")
+
+# No real SMTP credentials exist in local dev — the console backend writes
+# the full email (including the reset link) to stdout, which is a real,
+# standard Django pattern for this, not a stub. Set EMAIL_BACKEND/EMAIL_HOST
+# etc. via env vars for a real deployment.
+EMAIL_BACKEND = env("EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", "no-reply@msmemarketplace.local")

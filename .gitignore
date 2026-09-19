@@ -41,3 +41,6 @@ ml-training/**/runs/
 **/AGENTS.md
 # --- Docker ---
 pgdata/
+
+# --- Local machine setup notes (not shared) ---
+LOCAL_SETUP_TODO.md

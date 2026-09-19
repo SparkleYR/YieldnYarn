@@ -2,9 +2,8 @@
 
 import { useState } from "react";
 import { IconCheck, IconEdit, IconX } from "@tabler/icons-react";
-import { toast } from "sonner";
 
-import type { MockVerificationItem, VerificationStatus } from "@/lib/mock-data";
+import type { VerificationQueueItem } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Field, FieldLabel } from "@/components/ui/field";
@@ -19,9 +18,9 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
-type Action = "CONFIRMED" | "OVERRIDDEN" | "REJECTED";
+export type ReviewAction = "CONFIRMED" | "OVERRIDDEN" | "REJECTED";
 
-const ACTIONS: { value: Action; label: string; icon: typeof IconCheck; notesRequired: boolean }[] = [
+const ACTIONS: { value: ReviewAction; label: string; icon: typeof IconCheck; notesRequired: boolean }[] = [
   { value: "CONFIRMED", label: "Confirm AI grade", icon: IconCheck, notesRequired: false },
   { value: "OVERRIDDEN", label: "Override", icon: IconEdit, notesRequired: true },
   { value: "REJECTED", label: "Reject listing", icon: IconX, notesRequired: true },
@@ -30,7 +29,10 @@ const ACTIONS: { value: Action; label: string; icon: typeof IconCheck; notesRequ
 /**
  * Review flow shared by the admin verification queue and (as the basis for
  * the fuller two-panel page) the verifier queue: confirm, override with
- * notes, or reject with notes.
+ * notes, or reject with notes. Submits directly to
+ * POST /api/verification/queue/{listing_id}/review/ and reports back to the
+ * parent only once that succeeds, so the parent's list stays in sync with
+ * what's actually persisted.
  */
 export function ReviewDialog({
   item,
@@ -38,13 +40,14 @@ export function ReviewDialog({
   onOpenChange,
   onResolve,
 }: {
-  item: MockVerificationItem | null;
+  item: VerificationQueueItem | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onResolve: (id: number, status: VerificationStatus, notes: string) => void;
+  onResolve: (item: VerificationQueueItem, action: ReviewAction, notes: string) => void | Promise<void>;
 }) {
-  const [action, setAction] = useState<Action>("CONFIRMED");
+  const [action, setAction] = useState<ReviewAction>("CONFIRMED");
   const [notes, setNotes] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   if (!item) return null;
 
@@ -52,6 +55,7 @@ export function ReviewDialog({
   const canSubmit = !activeAction.notesRequired || notes.trim().length > 0;
 
   function handleOpenChange(next: boolean) {
+    if (submitting) return;
     if (!next) {
       setAction("CONFIRMED");
       setNotes("");
@@ -59,17 +63,17 @@ export function ReviewDialog({
     onOpenChange(next);
   }
 
-  function handleSubmit() {
-    if (!canSubmit || !item) return;
-    onResolve(item.id, action, notes.trim());
-    toast.success(
-      action === "CONFIRMED"
-        ? "AI grade confirmed."
-        : action === "OVERRIDDEN"
-          ? "Grade overridden."
-          : "Listing rejected."
-    );
-    handleOpenChange(false);
+  async function handleSubmit() {
+    if (!canSubmit || !item || submitting) return;
+    setSubmitting(true);
+    try {
+      // The parent owns `open` (via `activeItem`) and only clears it on a
+      // successful resolve — so a failed submit leaves this dialog open
+      // with the entered notes intact, instead of closing either way.
+      await onResolve(item, action, notes.trim());
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -84,8 +88,8 @@ export function ReviewDialog({
 
         <div className="flex flex-col gap-3">
           <div className="flex items-center justify-between rounded-lg border border-border-muted px-3 py-2">
-            <span className="text-xs text-body">AI grade: {item.ai_grade}</span>
-            <ConfidenceBar value={item.ai_confidence} />
+            <span className="text-xs text-body">AI grade: {item.ai_grade ?? "Ungraded"}</span>
+            {item.ai_confidence !== null && <ConfidenceBar value={item.ai_confidence} />}
           </div>
 
           <div className="rounded-lg border border-border-muted">
@@ -104,6 +108,9 @@ export function ReviewDialog({
                 </div>
               </div>
             ))}
+            {item.attribute_scores.length === 0 && (
+              <p className="px-3 py-2 text-xs text-muted-2">No attribute scores yet.</p>
+            )}
           </div>
 
           <div className="grid grid-cols-3 gap-2">
@@ -145,8 +152,8 @@ export function ReviewDialog({
         </div>
 
         <DialogFooter>
-          <Button onClick={handleSubmit} disabled={!canSubmit}>
-            Submit
+          <Button onClick={handleSubmit} disabled={!canSubmit || submitting}>
+            {submitting ? "Submitting…" : "Submit"}
           </Button>
         </DialogFooter>
       </DialogContent>

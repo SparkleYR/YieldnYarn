@@ -1,49 +1,93 @@
-import { notFound } from "next/navigation";
-import { IconMapPin, IconStarFilled } from "@tabler/icons-react";
+"use client";
 
-import { MOCK_LISTINGS } from "@/lib/mock-data";
+import { useEffect, useState } from "react";
+import { notFound, useParams } from "next/navigation";
+import { IconMapPin } from "@tabler/icons-react";
+
+import { ApiError, getListing, type Listing } from "@/lib/api";
+import { getStoredTokens } from "@/lib/auth";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { ListingActions } from "@/components/buyer/listing-actions";
 
-const GRADE_ATTRIBUTES: Record<string, { name: string; value: string; mlGraded: boolean }[]> = {
-  agriculture: [
-    { name: "Foreign matter", value: "1.2%", mlGraded: true },
-    { name: "Moisture content", value: "10.8%", mlGraded: false },
-    { name: "Grade standard", value: "FAQ", mlGraded: false },
-  ],
-  textiles: [
-    { name: "Defect rate", value: "0.8%", mlGraded: true },
-    { name: "GSM", value: "180", mlGraded: false },
-    { name: "Thread count", value: "60x60", mlGraded: false },
-  ],
-};
+export default function ListingDetailPage() {
+  const params = useParams<{ id: string }>();
+  const listingId = Number(params.id);
 
-export default async function ListingDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const { id } = await params;
-  const listing = MOCK_LISTINGS.find((l) => l.id === Number(id));
-  if (!listing) notFound();
+  const [listing, setListing] = useState<Listing | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [missing, setMissing] = useState(false);
 
-  const attributes = GRADE_ATTRIBUTES[listing.vertical];
-  const gradeAdjustment = listing.price_final - listing.price_suggested;
+  useEffect(() => {
+    if (!Number.isFinite(listingId)) return;
+    let cancelled = false;
+
+    async function load() {
+      const token = getStoredTokens()?.access;
+      try {
+        const result = await getListing(listingId, token);
+        if (!cancelled) setListing(result);
+      } catch (err) {
+        if (cancelled) return;
+        if (err instanceof ApiError && err.status === 404) {
+          setMissing(true);
+        } else {
+          setError(err instanceof ApiError ? err.message : "Failed to load this listing.");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [listingId]);
+
+  if (missing || !Number.isFinite(listingId)) {
+    notFound();
+  }
+
+  if (error) {
+    return (
+      <div className="mx-auto max-w-4xl rounded-2xl border border-border-muted bg-surface p-8 text-center text-sm text-body">
+        {error}
+      </div>
+    );
+  }
+
+  if (loading || !listing) {
+    return (
+      <div className="mx-auto flex max-w-5xl flex-col gap-6">
+        <Skeleton className="h-8 w-64" />
+        <Skeleton className="h-96 rounded-2xl" />
+      </div>
+    );
+  }
+
+  const price = Number(listing.price_final ?? listing.price_suggested ?? 0);
+  const suggested = listing.price_suggested !== null ? Number(listing.price_suggested) : null;
+  const gradeAdjustment = suggested !== null ? price - suggested : 0;
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-6">
       <div>
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="text-xl font-semibold text-heading">
-            {listing.commodity_name} — {listing.sub_category}
+            {listing.commodity_name}
+            {listing.sub_category && ` — ${listing.sub_category}`}
           </h1>
           <StatusBadge status={listing.status} />
         </div>
-        <p className="mt-1 flex items-center gap-1 text-sm text-muted-2">
-          <IconMapPin size={14} />
-          {listing.region}
-        </p>
+        {listing.location_lat !== null && listing.location_lng !== null && (
+          <p className="mt-1 flex items-center gap-1 text-sm text-muted-2">
+            <IconMapPin size={14} />
+            {listing.location_lat.toFixed(2)}, {listing.location_lng.toFixed(2)}
+          </p>
+        )}
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -59,32 +103,21 @@ export default async function ListingDetailPage({
               <h2 className="text-sm font-semibold text-heading">Grading report</h2>
               <Badge
                 className={
-                  listing.grade === "Ungraded"
+                  listing.grade === null
                     ? "bg-muted text-muted-2"
                     : "bg-brand-primary/15 text-brand-primary-glow"
                 }
               >
-                {listing.grade}
+                {listing.grade ?? "Ungraded"}
               </Badge>
             </div>
-            <ul className="mt-4 flex flex-col divide-y divide-border-muted">
-              {attributes.map((attr) => (
-                <li key={attr.name} className="flex items-center justify-between py-2.5 text-sm">
-                  <span className="flex items-center gap-2 text-body">
-                    {attr.name}
-                    {attr.mlGraded && (
-                      <span className="rounded-full bg-brand-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-brand-primary-glow">
-                        AI-graded
-                      </span>
-                    )}
-                  </span>
-                  <span className="font-medium text-heading">{attr.value}</span>
-                </li>
-              ))}
-            </ul>
-            {listing.grade !== "Ungraded" && (
+            {listing.grade !== null && listing.grade_confidence !== null ? (
               <p className="mt-3 text-xs text-muted-2">
-                {Math.round(listing.grade_confidence * 100)}% model confidence on AI-graded attributes.
+                {Math.round(listing.grade_confidence * 100)}% model confidence on the latest grading result.
+              </p>
+            ) : (
+              <p className="mt-3 text-xs text-muted-2">
+                This listing hasn&apos;t been graded yet.
               </p>
             )}
           </div>
@@ -94,21 +127,25 @@ export default async function ListingDetailPage({
           <div className="rounded-2xl border border-border-muted bg-surface p-5">
             <h2 className="text-sm font-semibold text-heading">Price breakdown</h2>
             <dl className="mt-4 flex flex-col gap-2 text-sm">
-              <div className="flex justify-between">
-                <dt className="text-body">Base market price</dt>
-                <dd className="text-heading">₹{listing.price_suggested.toLocaleString("en-IN")}</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-body">Grade adjustment</dt>
-                <dd className={gradeAdjustment >= 0 ? "text-success" : "text-error"}>
-                  {gradeAdjustment >= 0 ? "+" : ""}
-                  ₹{gradeAdjustment.toLocaleString("en-IN")}
-                </dd>
-              </div>
+              {suggested !== null && (
+                <>
+                  <div className="flex justify-between">
+                    <dt className="text-body">Base market price</dt>
+                    <dd className="text-heading">₹{suggested.toLocaleString("en-IN")}</dd>
+                  </div>
+                  <div className="flex justify-between">
+                    <dt className="text-body">Grade adjustment</dt>
+                    <dd className={gradeAdjustment >= 0 ? "text-success" : "text-error"}>
+                      {gradeAdjustment >= 0 ? "+" : ""}
+                      ₹{gradeAdjustment.toLocaleString("en-IN")}
+                    </dd>
+                  </div>
+                </>
+              )}
               <div className="mt-1 flex justify-between border-t border-border-muted pt-2 font-semibold">
                 <dt className="text-heading">Final price</dt>
                 <dd className="text-heading">
-                  ₹{listing.price_final.toLocaleString("en-IN")} / {listing.unit}
+                  ₹{price.toLocaleString("en-IN")} / {listing.unit}
                 </dd>
               </div>
               <div className="flex justify-between text-xs text-muted-2">
@@ -123,13 +160,9 @@ export default async function ListingDetailPage({
           <div className="rounded-2xl border border-border-muted bg-surface p-5">
             <h2 className="text-sm font-semibold text-heading">Seller</h2>
             <p className="mt-2 text-sm font-medium text-heading">{listing.seller_name}</p>
-            <p className="mt-1 flex items-center gap-1 text-xs text-body">
-              <IconStarFilled size={12} className="text-warning" />
-              {listing.seller_reputation.toFixed(1)} reputation score
-            </p>
           </div>
 
-          <ListingActions />
+          <ListingActions listing={listing} price={price} />
         </div>
       </div>
     </div>

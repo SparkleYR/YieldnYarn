@@ -16,21 +16,18 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from db import GradingEvidence, GradingResult, GradingSchema, Listing, get_db
+from db import GradingEvidence, GradingResult, Listing, get_db
+from grading.grade import derive_grade
+from grading.lookup import get_grading_schema_attributes
 from grading.pipeline import CONFIDENCE_VERIFICATION_THRESHOLD, grade_attributes
 from grading.schemas import GradeRequest, GradeResponse, GradingStatusResponse
 
 router = APIRouter(prefix="/compute/grading", tags=["grading"])
 
 
-def _ml_attribute_names(db: Session, vertical_id: int | None) -> list[str]:
+def _ml_attribute_names(attributes: list[dict]) -> list[str]:
     """Names of attributes flagged `gradeable_by_ml: true` in the vertical's grading_schema."""
-    if vertical_id is None:
-        return []
-    schema = db.execute(select(GradingSchema).where(GradingSchema.vertical_id == vertical_id)).scalars().first()
-    if schema is None or not schema.attributes:
-        return []
-    return [a["name"] for a in schema.attributes if a.get("gradeable_by_ml")]
+    return [a["name"] for a in attributes if a.get("gradeable_by_ml")]
 
 
 @router.post("/grade", response_model=GradeResponse)
@@ -46,11 +43,13 @@ def trigger_grading(payload: GradeRequest, db: Session = Depends(get_db)) -> Gra
         # this service needs to actually read the files (see docker-compose's
         # `media` volume) rather than just passing them through.
         evidence_paths = [e.file for e in evidence if e.file_type == "IMAGE"]
-        ml_attributes = _ml_attribute_names(db, listing.vertical_id)
+        schema_attributes = get_grading_schema_attributes(db, listing.vertical_id)
+        ml_attributes = _ml_attribute_names(schema_attributes)
     except SQLAlchemyError as exc:
         raise HTTPException(status_code=503, detail=f"Database not ready: {exc}") from exc
 
     grading = grade_attributes(evidence_paths, ml_attributes)
+    grade, _grade_score = derive_grade(grading["attribute_scores"], schema_attributes)
 
     persistence_error: str | None = None
     result_id: int | None = None
@@ -83,6 +82,7 @@ def trigger_grading(payload: GradeRequest, db: Session = Depends(get_db)) -> Gra
         overall_confidence=grading["overall_confidence"],
         needs_verification=grading["needs_verification"],
         method=grading["method"],
+        grade=grade,
         created_at=created_at,
         persistence_error=persistence_error,
     )
@@ -98,11 +98,15 @@ def grading_status(listing_id: int, db: Session = Depends(get_db)) -> GradingSta
             .scalars()
             .first()
         )
+        listing = db.get(Listing, listing_id) if result is not None else None
     except SQLAlchemyError as exc:
         raise HTTPException(status_code=503, detail=f"Database not ready: {exc}") from exc
 
     if result is None:
         return GradingStatusResponse(listing_id=listing_id, status="NOT_GRADED")
+
+    schema_attributes = get_grading_schema_attributes(db, listing.vertical_id if listing else None)
+    grade, _grade_score = derive_grade(result.attribute_scores, schema_attributes)
 
     status = "VERIFICATION_PENDING" if result.confidence_score < CONFIDENCE_VERIFICATION_THRESHOLD else "GRADED"
     return GradingStatusResponse(
@@ -111,5 +115,6 @@ def grading_status(listing_id: int, db: Session = Depends(get_db)) -> GradingSta
         confidence_score=result.confidence_score,
         attribute_scores=result.attribute_scores,
         source=result.source,
+        grade=grade,
         created_at=result.created_at,
     )

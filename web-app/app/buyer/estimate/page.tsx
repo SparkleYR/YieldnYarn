@@ -1,14 +1,23 @@
 "use client";
 
-import { useState } from "react";
-import { Controller, useForm, useWatch } from "react-hook-form";
+import { useEffect, useState } from "react";
+import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 
-import { mockPriceTrend } from "@/lib/mock-data";
-import { PriceTrendChart } from "@/components/shared/price-trend-chart";
+import {
+  ApiError,
+  getBasePrice,
+  getPriceEstimate,
+  getPriceTrends,
+  listVerticals,
+  type Vertical,
+} from "@/lib/api";
+import { getStoredTokens } from "@/lib/auth";
+import { PriceTrendChart, type PriceTrendPoint } from "@/components/shared/price-trend-chart";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import {
   Select,
@@ -18,40 +27,34 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-const BASE_PRICES: Record<string, number> = {
-  Wheat: 2410,
-  Chana: 5150,
-  "Cotton Fabric": 68,
-  "Cotton Yarn": 245,
-};
-
-const GRADE_MULTIPLIER: Record<string, number> = {
-  "Grade A": 1.04,
-  "Grade B": 1.0,
-  "Grade C": 0.92,
-};
+const NO_MIN_GRADE = "__any__";
 
 const schema = z.object({
-  vertical: z.enum(["agriculture", "textiles"]),
+  vertical: z.string().min(1, "Select a vertical"),
   commodity: z.string().min(1, "Required"),
   quantity: z.coerce.number().positive("Must be greater than 0"),
-  minGrade: z.enum(["Grade A", "Grade B", "Grade C"]),
-  region: z.string().min(1, "Required"),
+  minGrade: z.string(),
 });
 
 type FormInput = z.input<typeof schema>;
 type FormValues = z.output<typeof schema>;
 
 interface Estimate {
-  basePrice: number;
-  gradeAdjustedPrice: number;
+  basePrice: number | null;
+  unitPrice: number;
   total: number;
   quantity: number;
   commodity: string;
+  trend: PriceTrendPoint[];
 }
 
 export default function EstimatePage() {
+  const [verticals, setVerticals] = useState<Vertical[]>([]);
+  const [verticalsLoading, setVerticalsLoading] = useState(true);
   const [estimate, setEstimate] = useState<Estimate | null>(null);
+  const [notFound, setNotFound] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
   const {
     register,
     handleSubmit,
@@ -59,21 +62,67 @@ export default function EstimatePage() {
     formState: { errors, isSubmitting },
   } = useForm<FormInput, unknown, FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { vertical: "agriculture", commodity: "Wheat", minGrade: "Grade A" },
+    defaultValues: { minGrade: NO_MIN_GRADE },
   });
 
-  const vertical = useWatch({ control, name: "vertical" });
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const token = getStoredTokens()?.access;
+      if (!token) {
+        if (!cancelled) setVerticalsLoading(false);
+        return;
+      }
+      try {
+        const res = await listVerticals(token);
+        if (!cancelled) setVerticals(res.results);
+      } finally {
+        if (!cancelled) setVerticalsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
-  function onSubmit(values: FormValues) {
-    const basePrice = BASE_PRICES[values.commodity] ?? 2000;
-    const gradeAdjustedPrice = Math.round(basePrice * (GRADE_MULTIPLIER[values.minGrade] ?? 1));
-    setEstimate({
-      basePrice,
-      gradeAdjustedPrice,
-      total: gradeAdjustedPrice * values.quantity,
-      quantity: values.quantity,
-      commodity: values.commodity,
-    });
+  async function onSubmit(values: FormValues) {
+    setError(null);
+    setNotFound(false);
+    setEstimate(null);
+    const minGrade = values.minGrade === NO_MIN_GRADE ? undefined : values.minGrade;
+    try {
+      const [baseRes, estimateRes, trendsRes] = await Promise.all([
+        getBasePrice(values.vertical, values.commodity).catch((err) => {
+          if (err instanceof ApiError && err.status === 404) return null;
+          throw err;
+        }),
+        getPriceEstimate({
+          vertical: values.vertical,
+          commodity: values.commodity,
+          quantity: values.quantity,
+          min_grade: minGrade,
+        }),
+        getPriceTrends(values.vertical, values.commodity, 30),
+      ]);
+
+      setEstimate({
+        basePrice: baseRes?.base_price ?? null,
+        unitPrice: estimateRes.unit_price,
+        total: estimateRes.estimated_total,
+        quantity: values.quantity,
+        commodity: values.commodity,
+        trend: trendsRes.points.map((p) => ({
+          date: new Date(p.timestamp).toLocaleDateString("en-IN", { day: "2-digit", month: "short" }),
+          price: p.price,
+        })),
+      });
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 404) {
+        setNotFound(true);
+      } else {
+        setError(err instanceof ApiError ? err.message : "Failed to get an estimate.");
+      }
+    }
   }
 
   return (
@@ -91,51 +140,37 @@ export default function EstimatePage() {
           className="rounded-2xl border border-border-muted bg-surface p-5"
         >
           <FieldGroup>
-            <Field>
+            <Field data-invalid={!!errors.vertical}>
               <FieldLabel htmlFor="vertical">Vertical</FieldLabel>
-              <Controller
-                control={control}
-                name="vertical"
-                render={({ field }) => (
-                  <Select value={field.value} onValueChange={field.onChange}>
-                    <SelectTrigger id="vertical" className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="agriculture">Agriculture</SelectItem>
-                      <SelectItem value="textiles">Textiles</SelectItem>
-                    </SelectContent>
-                  </Select>
-                )}
-              />
+              {verticalsLoading ? (
+                <Skeleton className="h-9 w-full" />
+              ) : (
+                <Controller
+                  control={control}
+                  name="vertical"
+                  render={({ field }) => (
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <SelectTrigger id="vertical" className="w-full">
+                        <SelectValue placeholder="Select a vertical" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {verticals.map((v) => (
+                          <SelectItem key={v.id} value={v.slug}>
+                            {v.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+              )}
+              <FieldError errors={errors.vertical ? [errors.vertical] : undefined} />
             </Field>
 
             <Field data-invalid={!!errors.commodity}>
               <FieldLabel htmlFor="commodity">Commodity</FieldLabel>
-              <Controller
-                control={control}
-                name="commodity"
-                render={({ field }) => (
-                  <Select value={field.value} onValueChange={field.onChange}>
-                    <SelectTrigger id="commodity" className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {vertical === "agriculture" ? (
-                        <>
-                          <SelectItem value="Wheat">Wheat</SelectItem>
-                          <SelectItem value="Chana">Chana</SelectItem>
-                        </>
-                      ) : (
-                        <>
-                          <SelectItem value="Cotton Fabric">Cotton Fabric</SelectItem>
-                          <SelectItem value="Cotton Yarn">Cotton Yarn</SelectItem>
-                        </>
-                      )}
-                    </SelectContent>
-                  </Select>
-                )}
-              />
+              <Input id="commodity" placeholder="Wheat" {...register("commodity")} />
+              <FieldError errors={errors.commodity ? [errors.commodity] : undefined} />
             </Field>
 
             <div className="grid grid-cols-2 gap-3">
@@ -145,7 +180,7 @@ export default function EstimatePage() {
                 <FieldError errors={errors.quantity ? [errors.quantity] : undefined} />
               </Field>
               <Field>
-                <FieldLabel htmlFor="minGrade">Min. grade</FieldLabel>
+                <FieldLabel htmlFor="minGrade">Grade (optional)</FieldLabel>
                 <Controller
                   control={control}
                   name="minGrade"
@@ -155,6 +190,7 @@ export default function EstimatePage() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
+                        <SelectItem value={NO_MIN_GRADE}>Any grade</SelectItem>
                         <SelectItem value="Grade A">Grade A</SelectItem>
                         <SelectItem value="Grade B">Grade B</SelectItem>
                         <SelectItem value="Grade C">Grade C</SelectItem>
@@ -165,20 +201,27 @@ export default function EstimatePage() {
               </Field>
             </div>
 
-            <Field data-invalid={!!errors.region}>
-              <FieldLabel htmlFor="region">Region</FieldLabel>
-              <Input id="region" placeholder="Uttar Pradesh" {...register("region")} />
-              <FieldError errors={errors.region ? [errors.region] : undefined} />
-            </Field>
-
-            <Button type="submit" disabled={isSubmitting} className="mt-2">
+            <Button type="submit" disabled={isSubmitting || verticalsLoading} className="mt-2">
               {isSubmitting ? "Calculating…" : "Get estimate"}
             </Button>
           </FieldGroup>
         </form>
 
         <div className="flex flex-col gap-4">
-          {estimate ? (
+          {error && (
+            <div className="flex h-full min-h-52 items-center justify-center rounded-2xl border border-dashed border-error/40 p-8 text-center text-sm text-error">
+              {error}
+            </div>
+          )}
+
+          {!error && notFound && (
+            <div className="flex h-full min-h-52 items-center justify-center rounded-2xl border border-dashed border-border-muted p-8 text-center text-sm text-body">
+              No price data available yet for this commodity in this vertical. An admin needs to
+              add a price point first (Admin → Pricing).
+            </div>
+          )}
+
+          {!error && !notFound && estimate ? (
             <div className="rounded-2xl border border-border-muted bg-surface p-5">
               <p className="text-xs font-medium tracking-wide text-muted-2 uppercase">
                 Estimated total
@@ -187,14 +230,16 @@ export default function EstimatePage() {
                 ₹{estimate.total.toLocaleString("en-IN")}
               </p>
               <dl className="mt-4 flex flex-col gap-2 text-sm">
+                {estimate.basePrice !== null && (
+                  <div className="flex justify-between">
+                    <dt className="text-body">Base market price</dt>
+                    <dd className="text-heading">₹{estimate.basePrice.toLocaleString("en-IN")}</dd>
+                  </div>
+                )}
                 <div className="flex justify-between">
-                  <dt className="text-body">Base market price</dt>
-                  <dd className="text-heading">₹{estimate.basePrice.toLocaleString("en-IN")}</dd>
-                </div>
-                <div className="flex justify-between">
-                  <dt className="text-body">Grade-adjusted price</dt>
+                  <dt className="text-body">Grade & quantity-adjusted unit price</dt>
                   <dd className="text-heading">
-                    ₹{estimate.gradeAdjustedPrice.toLocaleString("en-IN")}
+                    ₹{estimate.unitPrice.toLocaleString("en-IN")}
                   </dd>
                 </div>
                 <div className="flex justify-between">
@@ -203,15 +248,26 @@ export default function EstimatePage() {
                 </div>
               </dl>
 
-              <p className="mt-5 text-xs font-medium tracking-wide text-muted-2 uppercase">
-                30-day price trend — {estimate.commodity}
-              </p>
-              <PriceTrendChart data={mockPriceTrend(estimate.basePrice)} className="mt-2" />
+              {estimate.trend.length > 0 ? (
+                <>
+                  <p className="mt-5 text-xs font-medium tracking-wide text-muted-2 uppercase">
+                    30-day price trend — {estimate.commodity}
+                  </p>
+                  <PriceTrendChart data={estimate.trend} className="mt-2" />
+                </>
+              ) : (
+                <p className="mt-5 text-xs text-muted-2">
+                  No price history in the last 30 days to chart yet.
+                </p>
+              )}
             </div>
           ) : (
-            <div className="flex h-full min-h-52 items-center justify-center rounded-2xl border border-dashed border-border-muted p-8 text-center text-sm text-muted-2">
-              Fill in the form to see a grade-adjusted estimate and price trend.
-            </div>
+            !error &&
+            !notFound && (
+              <div className="flex h-full min-h-52 items-center justify-center rounded-2xl border border-dashed border-border-muted p-8 text-center text-sm text-muted-2">
+                Fill in the form to see a grade-adjusted estimate and price trend.
+              </div>
+            )
           )}
         </div>
       </div>

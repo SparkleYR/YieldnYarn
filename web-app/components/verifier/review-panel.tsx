@@ -6,7 +6,8 @@ import Link from "next/link";
 import { IconArrowLeft, IconCheck, IconEdit, IconPhoto, IconZoomIn } from "@tabler/icons-react";
 import { toast } from "sonner";
 
-import type { MockVerificationItem } from "@/lib/mock-data";
+import { ApiError, submitVerificationReview, type VerificationQueueItem } from "@/lib/api";
+import { getStoredTokens } from "@/lib/auth";
 import { PriorityBadge } from "@/components/shared/status-badge";
 import { ConfidenceBar } from "@/components/shared/confidence-bar";
 import { Button } from "@/components/ui/button";
@@ -19,21 +20,41 @@ import { cn } from "@/lib/utils";
  * Two-panel verifier review: an evidence viewer on the left, AI grading
  * results + a per-attribute override form on the right.
  */
-export function VerifierReviewPanel({ item }: { item: MockVerificationItem }) {
+export function VerifierReviewPanel({ item }: { item: VerificationQueueItem }) {
   const router = useRouter();
   const [activeImage, setActiveImage] = useState(0);
   const [zoomed, setZoomed] = useState(false);
   const [overrides, setOverrides] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   const hasOverrides = Object.values(overrides).some((v) => v.trim() !== "");
   const canOverride = notes.trim().length > 0;
 
-  function submit(action: "CONFIRMED" | "OVERRIDDEN") {
-    // TODO: POST /api/verification/queue/{id}/review/ once the verifier
-    // endpoints are exercised from the frontend.
-    toast.success(action === "CONFIRMED" ? "AI grade confirmed." : "Override submitted.");
-    router.push("/verifier/queue");
+  async function submit(action: "CONFIRMED" | "OVERRIDDEN") {
+    const token = getStoredTokens()?.access;
+    if (!token) {
+      toast.error("You must be signed in as a verifier or admin to submit a review.");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await submitVerificationReview(
+        item.listing_id,
+        {
+          decision: "APPROVE", // both CONFIRMED and OVERRIDDEN approve the listing
+          notes,
+          ...(action === "OVERRIDDEN" ? { attribute_scores: overrides } : {}),
+        },
+        token
+      );
+      toast.success(action === "CONFIRMED" ? "AI grade confirmed." : "Override submitted.");
+      router.push("/verifier/queue");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to submit review.");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -96,8 +117,10 @@ export function VerifierReviewPanel({ item }: { item: MockVerificationItem }) {
         {/* Right: AI grading + override form */}
         <div className="flex flex-col gap-4">
           <div className="flex items-center justify-between rounded-2xl border border-border-muted bg-surface px-4 py-3">
-            <span className="text-sm text-body">AI grade: <span className="font-medium text-heading">{item.ai_grade}</span></span>
-            <ConfidenceBar value={item.ai_confidence} />
+            <span className="text-sm text-body">
+              AI grade: <span className="font-medium text-heading">{item.ai_grade ?? "Ungraded"}</span>
+            </span>
+            {item.ai_confidence !== null && <ConfidenceBar value={item.ai_confidence} />}
           </div>
 
           <div className="rounded-2xl border border-border-muted bg-surface p-4">
@@ -136,11 +159,20 @@ export function VerifierReviewPanel({ item }: { item: MockVerificationItem }) {
           </Field>
 
           <div className="flex flex-col gap-2 sm:flex-row">
-            <Button variant="outline" className="flex-1" onClick={() => submit("CONFIRMED")}>
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={() => submit("CONFIRMED")}
+              disabled={submitting}
+            >
               <IconCheck />
               Confirm AI Grade
             </Button>
-            <Button className="flex-1" onClick={() => submit("OVERRIDDEN")} disabled={!canOverride}>
+            <Button
+              className="flex-1"
+              onClick={() => submit("OVERRIDDEN")}
+              disabled={!canOverride || submitting}
+            >
               <IconEdit />
               Submit Override
             </Button>

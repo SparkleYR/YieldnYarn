@@ -29,8 +29,20 @@ class Requirement(models.Model):
     budget = models.DecimalField(
         max_digits=12, decimal_places=2, null=True, blank=True
     )
+    # Free-text label (e.g. "Uttar Pradesh") the buyer types in directly —
+    # independent of region_lat/region_lng below, which drive matching's geo
+    # radius filter (implementation_plan.md §12) and need actual coordinates,
+    # not a place name, so nothing here auto-populates them. Mirrors the same
+    # free-text-alongside-coordinates split already used for price_points.region.
+    region = models.CharField(max_length=150, blank=True, default="")
     region_lat = models.FloatField(null=True, blank=True)
     region_lng = models.FloatField(null=True, blank=True)
+    # Radius for matching's geo filter (backend-fastapi/matching/router.py,
+    # implementation_plan.md §12) — only applied when region_lat/region_lng
+    # are both set. Default chosen to be generous for bulk commodities
+    # (agriculture/textiles typically move across a state, not just a city)
+    # rather than a tight last-mile-delivery radius.
+    search_radius_km = models.FloatField(default=100.0)
     status = models.CharField(
         max_length=15, choices=Status.choices, default=Status.OPEN
     )

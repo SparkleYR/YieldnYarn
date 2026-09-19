@@ -12,12 +12,18 @@ import {
 } from "@tabler/icons-react";
 import { toast } from "sonner";
 
-import type {
-  MockGradeAdjustment,
-  MockGradingAttribute,
-  MockQuantityTier,
-  MockVerticalConfig,
-} from "@/lib/mock-data";
+import {
+  ApiError,
+  updateGradingSchema,
+  updatePricingRule,
+  type GradingAttribute,
+  type GradingSchema,
+  type PricingRule,
+  type PricingRuleGradeAdjustment,
+  type PricingRuleQuantityTier,
+  type Vertical,
+} from "@/lib/api";
+import { getStoredTokens } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -39,44 +45,156 @@ function reorder<T>(list: T[], index: number, direction: -1 | 1): T[] {
   return next;
 }
 
+// --- UI-local editable shapes -----------------------------------------------
+// The editor works in percentages (more legible for admins editing a table)
+// while backend-fastapi/pricing/service.py reads multipliers — see the
+// to/from converters below. `_key` is a client-only React list key, stripped
+// before persisting.
+
+type EditableAttribute = GradingAttribute & { _key: string };
+
+interface EditableGradeAdjustment {
+  _key: string;
+  grade: string;
+  adjustment_pct: number; // e.g. 4 means "+4%" -> multiplier 1.04
+}
+
+interface EditableQuantityTier {
+  _key: string;
+  min_qty: number;
+  discount_pct: number; // e.g. 1.5 means "-1.5%" -> multiplier 0.985
+}
+
+function multiplierToAdjustmentPct(multiplier: number): number {
+  return Math.round((multiplier - 1) * 1000) / 10;
+}
+
+function adjustmentPctToMultiplier(pct: number): number {
+  return 1 + pct / 100;
+}
+
+function multiplierToDiscountPct(multiplier: number): number {
+  return Math.round((1 - multiplier) * 1000) / 10;
+}
+
+function discountPctToMultiplier(pct: number): number {
+  return 1 - pct / 100;
+}
+
+function keyed(): string {
+  return typeof crypto !== "undefined" && crypto.randomUUID
+    ? crypto.randomUUID()
+    : Math.random().toString(36).slice(2);
+}
+
+function toEditableAdjustments(
+  table: PricingRuleGradeAdjustment[]
+): EditableGradeAdjustment[] {
+  return table.map((row) => ({
+    _key: keyed(),
+    grade: row.grade,
+    adjustment_pct: multiplierToAdjustmentPct(row.multiplier),
+  }));
+}
+
+function toEditableTiers(table: PricingRuleQuantityTier[]): EditableQuantityTier[] {
+  return table.map((row) => ({
+    _key: keyed(),
+    min_qty: row.min_quantity,
+    discount_pct: multiplierToDiscountPct(row.multiplier),
+  }));
+}
+
 /**
  * Visual JSONB schema editor for a vertical's grading attributes and pricing
- * rules — no raw JSON, per the plan. Edits are local state; "Save changes"
- * is a placeholder until PATCH /api/config/verticals/[id]/ is wired up.
+ * rules — no raw JSON, per the plan. "Save changes" persists via
+ * PUT /api/config/verticals/{id}/grading-schema/ and .../pricing-rules/.
  */
-export function VerticalEditor({ vertical }: { vertical: MockVerticalConfig }) {
-  const [attributes, setAttributes] = useState<MockGradingAttribute[]>(vertical.grading_attributes);
-  const [gradeAdjustments, setGradeAdjustments] = useState<MockGradeAdjustment[]>(
-    vertical.grade_adjustments
+export function VerticalEditor({
+  vertical,
+  gradingSchema,
+  pricingRule,
+}: {
+  vertical: Vertical;
+  gradingSchema: GradingSchema;
+  pricingRule: PricingRule;
+}) {
+  const [attributes, setAttributes] = useState<EditableAttribute[]>(
+    gradingSchema.attributes.map((a) => ({ ...a, _key: keyed() }))
   );
-  const [quantityTiers, setQuantityTiers] = useState<MockQuantityTier[]>(vertical.quantity_tiers);
+  const [gradeAdjustments, setGradeAdjustments] = useState<EditableGradeAdjustment[]>(
+    toEditableAdjustments(pricingRule.rules?.grade_adjustment_table ?? [])
+  );
+  const [quantityTiers, setQuantityTiers] = useState<EditableQuantityTier[]>(
+    toEditableTiers(pricingRule.rules?.quantity_tier_table ?? [])
+  );
   const [preview, setPreview] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const weightTotal = attributes.reduce((sum, a) => sum + a.weight, 0);
 
-  function updateAttribute(index: number, patch: Partial<MockGradingAttribute>) {
+  function updateAttribute(index: number, patch: Partial<EditableAttribute>) {
     setAttributes((prev) => prev.map((a, i) => (i === index ? { ...a, ...patch } : a)));
   }
 
   function addAttribute() {
     setAttributes((prev) => [
       ...prev,
-      { id: `attr-${Date.now()}`, name: "New attribute", type: "numeric", gradeable_by_ml: false, weight: 0, range: "" },
+      {
+        _key: keyed(),
+        name: "New attribute",
+        type: "numeric",
+        gradeable_by_ml: false,
+        weight: 0,
+        range: "",
+      },
     ]);
   }
 
-  function updateAdjustment(index: number, patch: Partial<MockGradeAdjustment>) {
+  function updateAdjustment(index: number, patch: Partial<EditableGradeAdjustment>) {
     setGradeAdjustments((prev) => prev.map((a, i) => (i === index ? { ...a, ...patch } : a)));
   }
 
-  function updateTier(index: number, patch: Partial<MockQuantityTier>) {
+  function updateTier(index: number, patch: Partial<EditableQuantityTier>) {
     setQuantityTiers((prev) => prev.map((t, i) => (i === index ? { ...t, ...patch } : t)));
   }
 
-  function handleSave() {
-    // TODO: PATCH /api/config/verticals/{id}/ once the admin config
-    // endpoints are exercised from the frontend.
-    toast.success("Vertical configuration saved.");
+  async function handleSave() {
+    const token = getStoredTokens()?.access;
+    if (!token) {
+      toast.error("You must be signed in as an admin to save changes.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const attributesForApi: GradingAttribute[] = attributes.map((attr) => ({
+        name: attr.name,
+        type: attr.type,
+        gradeable_by_ml: attr.gradeable_by_ml,
+        weight: attr.weight,
+        range: attr.range,
+      }));
+      const rulesForApi = {
+        grade_adjustment_table: gradeAdjustments.map((a) => ({
+          grade: a.grade,
+          multiplier: adjustmentPctToMultiplier(a.adjustment_pct),
+        })),
+        quantity_tier_table: quantityTiers.map((t) => ({
+          min_quantity: t.min_qty,
+          multiplier: discountPctToMultiplier(t.discount_pct),
+        })),
+      };
+
+      await Promise.all([
+        updateGradingSchema(vertical.id, attributesForApi, token),
+        updatePricingRule(vertical.id, rulesForApi, token),
+      ]);
+      toast.success("Vertical configuration saved.");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to save changes.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -91,14 +209,16 @@ export function VerticalEditor({ vertical }: { vertical: MockVerticalConfig }) {
             Verticals
           </Link>
           <h1 className="text-lg font-semibold text-heading">{vertical.name}</h1>
-          <p className="text-sm text-body">{vertical.description}</p>
+          <p className="text-sm text-body">Unit of measure: {vertical.unit_of_measure}</p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <Button variant={preview ? "secondary" : "outline"} onClick={() => setPreview((p) => !p)}>
             <IconEye />
             {preview ? "Editing" : "Preview"}
           </Button>
-          <Button onClick={handleSave}>Save changes</Button>
+          <Button onClick={handleSave} disabled={saving}>
+            {saving ? "Saving…" : "Save changes"}
+          </Button>
         </div>
       </div>
 
@@ -127,7 +247,7 @@ export function VerticalEditor({ vertical }: { vertical: MockVerticalConfig }) {
               </div>
               {attributes.map((attr, i) => (
                 <AttributeRow
-                  key={attr.id}
+                  key={attr._key}
                   attribute={attr}
                   onChange={(patch) => updateAttribute(i, patch)}
                   onRemove={() => setAttributes((prev) => prev.filter((_, j) => j !== i))}
@@ -156,7 +276,7 @@ export function VerticalEditor({ vertical }: { vertical: MockVerticalConfig }) {
               </p>
               <div className="mt-3 flex flex-col gap-2">
                 {gradeAdjustments.map((adj, i) => (
-                  <div key={i} className="flex items-center gap-2">
+                  <div key={adj._key} className="flex items-center gap-2">
                     <Input
                       value={adj.grade}
                       onChange={(e) => updateAdjustment(i, { grade: e.target.value })}
@@ -185,7 +305,12 @@ export function VerticalEditor({ vertical }: { vertical: MockVerticalConfig }) {
                   variant="outline"
                   size="sm"
                   className="w-fit"
-                  onClick={() => setGradeAdjustments((prev) => [...prev, { grade: "New grade", adjustment_pct: 0 }])}
+                  onClick={() =>
+                    setGradeAdjustments((prev) => [
+                      ...prev,
+                      { _key: keyed(), grade: "New grade", adjustment_pct: 0 },
+                    ])
+                  }
                 >
                   <IconPlus />
                   Add grade
@@ -198,7 +323,7 @@ export function VerticalEditor({ vertical }: { vertical: MockVerticalConfig }) {
               <p className="mt-0.5 text-xs text-body">Bulk discount thresholds.</p>
               <div className="mt-3 flex flex-col gap-2">
                 {quantityTiers.map((tier, i) => (
-                  <div key={i} className="flex items-center gap-2 text-xs text-body">
+                  <div key={tier._key} className="flex items-center gap-2 text-xs text-body">
                     <span>At least</span>
                     <Input
                       type="number"
@@ -228,7 +353,12 @@ export function VerticalEditor({ vertical }: { vertical: MockVerticalConfig }) {
                   variant="outline"
                   size="sm"
                   className="w-fit"
-                  onClick={() => setQuantityTiers((prev) => [...prev, { min_qty: 0, discount_pct: 0 }])}
+                  onClick={() =>
+                    setQuantityTiers((prev) => [
+                      ...prev,
+                      { _key: keyed(), min_qty: 0, discount_pct: 0 },
+                    ])
+                  }
                 >
                   <IconPlus />
                   Add tier
@@ -250,8 +380,8 @@ function AttributeRow({
   isFirst,
   isLast,
 }: {
-  attribute: MockGradingAttribute;
-  onChange: (patch: Partial<MockGradingAttribute>) => void;
+  attribute: EditableAttribute;
+  onChange: (patch: Partial<EditableAttribute>) => void;
   onRemove: () => void;
   onMove: (direction: -1 | 1) => void;
   isFirst: boolean;
@@ -265,7 +395,7 @@ function AttributeRow({
 
       <Select
         value={attribute.type}
-        onValueChange={(v) => onChange({ type: v as MockGradingAttribute["type"] })}
+        onValueChange={(v) => onChange({ type: v as EditableAttribute["type"] })}
       >
         <SelectTrigger size="sm">
           <SelectValue />
@@ -321,9 +451,9 @@ function VerticalPreview({
   attributes,
   gradeAdjustments,
 }: {
-  vertical: MockVerticalConfig;
-  attributes: MockGradingAttribute[];
-  gradeAdjustments: MockGradeAdjustment[];
+  vertical: Vertical;
+  attributes: EditableAttribute[];
+  gradeAdjustments: EditableGradeAdjustment[];
 }) {
   const basePrice = 2500;
   const topGrade = gradeAdjustments[0];
@@ -343,7 +473,7 @@ function VerticalPreview({
       </div>
       <ul className="mt-4 flex flex-col divide-y divide-border-muted">
         {attributes.map((attr) => (
-          <li key={attr.id} className="flex items-center justify-between py-2 text-sm">
+          <li key={attr._key} className="flex items-center justify-between py-2 text-sm">
             <span className="flex items-center gap-2 text-body">
               {attr.name || "Untitled attribute"}
               {attr.gradeable_by_ml && (

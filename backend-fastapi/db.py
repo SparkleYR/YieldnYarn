@@ -28,6 +28,7 @@ wrapped in try/except around SQLAlchemyError.
 """
 from __future__ import annotations
 
+import uuid
 from typing import Generator
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -43,6 +44,7 @@ from sqlalchemy import (
     Text,
     create_engine,
 )
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Session, declarative_base, sessionmaker
 
 
@@ -97,7 +99,7 @@ class Vertical(Base):
     name = Column(String)
     slug = Column(String, unique=True, index=True)
     unit_of_measure = Column(String)
-    is_active = Column(Boolean, default=True)
+    is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime(timezone=True))
 
 
@@ -106,8 +108,10 @@ class GradingSchema(Base):
 
     id = Column(Integer, primary_key=True)
     vertical_id = Column(Integer, ForeignKey("verticals.id"))
-    # List of {name, type, range, ideal_value, weight, gradeable_by_ml}
-    attributes = Column(JSON)
+    # List of {name, type, range, ideal_value, weight, gradeable_by_ml}.
+    # NOT NULL at the DB level, no DB-side default — same ORM-only-default
+    # gap as the other fields flagged in this file (§12 test-coverage pass).
+    attributes = Column(JSON, default=list, nullable=False)
     created_at = Column(DateTime(timezone=True))
     updated_at = Column(DateTime(timezone=True))
 
@@ -117,8 +121,9 @@ class PricingRule(Base):
 
     id = Column(Integer, primary_key=True)
     vertical_id = Column(Integer, ForeignKey("verticals.id"))
-    # {"grade_adjustment_table": [...], "quantity_tier_table": [...]} — see pricing/service.py
-    rules = Column(JSON)
+    # {"grade_adjustment_table": [...], "quantity_tier_table": [...]} — see
+    # pricing/service.py. NOT NULL at the DB level, no DB-side default.
+    rules = Column(JSON, default=dict, nullable=False)
     created_at = Column(DateTime(timezone=True))
     updated_at = Column(DateTime(timezone=True))
 
@@ -127,6 +132,12 @@ class Listing(Base):
     __tablename__ = "listings"
 
     id = Column(Integer, primary_key=True)
+    # NOT NULL at the DB level (Django sets it client-side via
+    # `default=uuid.uuid4` on every save — there's no DB-level default) and
+    # was missing from this mapping entirely until a test tried to INSERT a
+    # Listing through it and hit a real NotNullViolation. Nothing on the
+    # compute path reads this column, but any INSERT needs it satisfied.
+    client_uuid = Column(UUID(as_uuid=True), default=uuid.uuid4, nullable=False)
     # NOTE: no FK to `users.id` here — the `users` table (owned by Django's
     # `accounts` app) isn't mapped in this metadata. Referential integrity is
     # already enforced at the DB level by Django's migration; declaring a
@@ -135,18 +146,22 @@ class Listing(Base):
     seller_id = Column(Integer)
     vertical_id = Column(Integer, ForeignKey("verticals.id"))
     commodity_name = Column(String)
-    sub_category = Column(String, nullable=True)
+    # NOT NULL at the DB level, no DB-side default (Django's `blank=True,
+    # default=""` is enforced at the ORM layer only) — was wrongly marked
+    # `nullable=True` here; same class of gap as client_uuid above, found
+    # the same way.
+    sub_category = Column(String, default="", nullable=False)
     quantity = Column(Float)
     unit = Column(String)
     price_suggested = Column(Float, nullable=True)
     price_final = Column(Float, nullable=True)
     # PostGIS-in-spirit but stored as plain lat/lng floats by Django (no
-    # geoalchemy2 dependency needed here). Real radius-based matching (e.g.
-    # haversine or PostGIS ST_DWithin) is a documented TODO — see
-    # matching/router.py.
+    # geoalchemy2 dependency needed here). Real haversine-distance radius
+    # matching is live — see matching/allocation.py:haversine_km /
+    # Requirement.search_radius_km.
     location_lat = Column(Float, nullable=True)
     location_lng = Column(Float, nullable=True)
-    status = Column(String, default="DRAFT")
+    status = Column(String, default="DRAFT", nullable=False)
     created_at = Column(DateTime(timezone=True))
     updated_at = Column(DateTime(timezone=True))
 
@@ -168,10 +183,12 @@ class GradingResult(Base):
     listing_id = Column(Integer, ForeignKey("listings.id"))
     source = Column(String)  # AI | VERIFIER
     confidence_score = Column(Float, nullable=True)
-    attribute_scores = Column(JSON)
+    attribute_scores = Column(JSON, default=dict, nullable=False)
     graded_by_id = Column(Integer, nullable=True)  # nullable for AI; see NOTE on Listing.seller_id re: no users FK
     created_at = Column(DateTime(timezone=True))
-    notes = Column(Text, nullable=True)
+    # NOT NULL at the DB level, no DB-side default (Django's `blank=True,
+    # default=""` is ORM-only) — was wrongly `nullable=True` here.
+    notes = Column(Text, default="", nullable=False)
 
 
 class PricePoint(Base):
@@ -201,12 +218,18 @@ class Requirement(Base):
     vertical_id = Column(Integer, ForeignKey("verticals.id"))
     commodity = Column(String)
     quantity = Column(Float)
-    min_grade = Column(String, nullable=True)
+    # NOT NULL at the DB level, no DB-side default — was wrongly `nullable=True`.
+    min_grade = Column(String, default="", nullable=False)
     max_price = Column(Float, nullable=True)
     budget = Column(Float, nullable=True)
+    # Free-text region label (implementation_plan.md §12) — NOT NULL, no
+    # DB-side default, same drift-prone pattern as the other CharField(blank=True,
+    # default="") columns already fixed above.
+    region = Column(String, default="", nullable=False)
     region_lat = Column(Float, nullable=True)
     region_lng = Column(Float, nullable=True)
-    status = Column(String, default="OPEN")
+    search_radius_km = Column(Float, default=100.0, nullable=False)
+    status = Column(String, default="OPEN", nullable=False)
     created_at = Column(DateTime(timezone=True))
 
 
@@ -216,7 +239,7 @@ class Order(Base):
     id = Column(Integer, primary_key=True)
     requirement_id = Column(Integer, ForeignKey("requirements.id"), nullable=True)
     buyer_id = Column(Integer)  # see NOTE on Listing.seller_id re: no users FK
-    status = Column(String, default="PENDING")
+    status = Column(String, default="PENDING", nullable=False)
     total_price = Column(Float, nullable=True)
     created_at = Column(DateTime(timezone=True))
 
@@ -229,7 +252,10 @@ class OrderAllocation(Base):
     listing_id = Column(Integer, ForeignKey("listings.id"))
     allocated_quantity = Column(Float)
     unit_price = Column(Float)
-    status = Column(String, nullable=True)
+    # NOT NULL at the DB level, no DB-side default — was wrongly `nullable=True`.
+    # (Every current insert site sets this explicitly, so this hadn't broken
+    # anything yet, but the mapping itself was inaccurate.)
+    status = Column(String, default="PENDING", nullable=False)
 
 
 class ReputationScore(Base):
@@ -238,9 +264,10 @@ class ReputationScore(Base):
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, unique=True)  # see NOTE on Listing.seller_id re: no users FK
     role = Column(String)
-    score = Column(Float, default=0.0)
-    grade_accuracy_score = Column(Float, nullable=True)
-    fulfillment_score = Column(Float, nullable=True)
-    payment_score = Column(Float, nullable=True)
-    total_transactions = Column(Integer, default=0)
+    score = Column(Float, default=0.0, nullable=False)
+    # NOT NULL at the DB level, no DB-side default — were wrongly `nullable=True`.
+    grade_accuracy_score = Column(Float, default=0.0, nullable=False)
+    fulfillment_score = Column(Float, default=0.0, nullable=False)
+    payment_score = Column(Float, default=0.0, nullable=False)
+    total_transactions = Column(Integer, default=0, nullable=False)
     last_updated = Column(DateTime(timezone=True))

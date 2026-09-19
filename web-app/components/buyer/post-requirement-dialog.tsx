@@ -7,7 +7,8 @@ import { z } from "zod";
 import { IconPlus } from "@tabler/icons-react";
 import { toast } from "sonner";
 
-import type { MockRequirement, Vertical } from "@/lib/mock-data";
+import { ApiError, createRequirement, type Requirement, type Vertical } from "@/lib/api";
+import { getStoredTokens } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -29,10 +30,9 @@ import {
 } from "@/components/ui/select";
 
 const schema = z.object({
-  vertical: z.enum(["agriculture", "textiles"]),
+  vertical: z.coerce.number().int().positive("Select a vertical"),
   commodity: z.string().min(1, "Required"),
   quantity: z.coerce.number().positive("Must be greater than 0"),
-  unit: z.string().min(1, "Required"),
   min_grade: z.string().min(1, "Required"),
   max_price: z.coerce.number().positive("Must be greater than 0"),
   region: z.string().min(1, "Required"),
@@ -42,9 +42,11 @@ type FormInput = z.input<typeof schema>;
 type FormValues = z.output<typeof schema>;
 
 export function PostRequirementDialog({
+  verticals,
   onCreate,
 }: {
-  onCreate: (req: Omit<MockRequirement, "id" | "status" | "created_at">) => void;
+  verticals: Vertical[];
+  onCreate: (req: Requirement) => void;
 }) {
   const [open, setOpen] = useState(false);
   const {
@@ -55,20 +57,39 @@ export function PostRequirementDialog({
     formState: { errors, isSubmitting },
   } = useForm<FormInput, unknown, FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { vertical: "agriculture", unit: "quintal" },
   });
 
-  function onSubmit(values: FormValues) {
-    onCreate(values as Omit<MockRequirement, "id" | "status" | "created_at"> & { vertical: Vertical });
-    toast.success("Requirement posted.");
-    reset();
-    setOpen(false);
+  async function onSubmit(values: FormValues) {
+    const token = getStoredTokens()?.access;
+    if (!token) {
+      toast.error("You must be signed in as a buyer to post a requirement.");
+      return;
+    }
+    try {
+      const created = await createRequirement(
+        {
+          vertical: values.vertical,
+          commodity: values.commodity,
+          quantity: values.quantity,
+          min_grade: values.min_grade,
+          max_price: values.max_price,
+          region: values.region,
+        },
+        token
+      );
+      onCreate(created);
+      toast.success("Requirement posted.");
+      reset();
+      setOpen(false);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to post the requirement.");
+    }
   }
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button>
+        <Button disabled={verticals.length === 0}>
           <IconPlus />
           Post requirement
         </Button>
@@ -89,17 +110,24 @@ export function PostRequirementDialog({
                 control={control}
                 name="vertical"
                 render={({ field }) => (
-                  <Select value={field.value} onValueChange={field.onChange}>
+                  <Select
+                    value={field.value ? String(field.value) : undefined}
+                    onValueChange={(v) => field.onChange(Number(v))}
+                  >
                     <SelectTrigger id="vertical" className="w-full">
-                      <SelectValue />
+                      <SelectValue placeholder="Select a vertical" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="agriculture">Agriculture</SelectItem>
-                      <SelectItem value="textiles">Textiles</SelectItem>
+                      {verticals.map((v) => (
+                        <SelectItem key={v.id} value={String(v.id)}>
+                          {v.name}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 )}
               />
+              <FieldError errors={errors.vertical ? [errors.vertical] : undefined} />
             </Field>
 
             <Field data-invalid={!!errors.commodity}>
@@ -108,18 +136,11 @@ export function PostRequirementDialog({
               <FieldError errors={errors.commodity ? [errors.commodity] : undefined} />
             </Field>
 
-            <div className="grid grid-cols-2 gap-3">
-              <Field data-invalid={!!errors.quantity}>
-                <FieldLabel htmlFor="quantity">Quantity</FieldLabel>
-                <Input id="quantity" type="number" step="any" {...register("quantity")} />
-                <FieldError errors={errors.quantity ? [errors.quantity] : undefined} />
-              </Field>
-              <Field data-invalid={!!errors.unit}>
-                <FieldLabel htmlFor="unit">Unit</FieldLabel>
-                <Input id="unit" placeholder="quintal" {...register("unit")} />
-                <FieldError errors={errors.unit ? [errors.unit] : undefined} />
-              </Field>
-            </div>
+            <Field data-invalid={!!errors.quantity}>
+              <FieldLabel htmlFor="quantity">Quantity</FieldLabel>
+              <Input id="quantity" type="number" step="any" {...register("quantity")} />
+              <FieldError errors={errors.quantity ? [errors.quantity] : undefined} />
+            </Field>
 
             <div className="grid grid-cols-2 gap-3">
               <Field data-invalid={!!errors.min_grade}>

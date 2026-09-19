@@ -11,13 +11,16 @@ const STATUS_STYLES: Record<string, string> = {
   PENDING_GRADING: "text-warning",
   PENDING_VERIFICATION: "text-warning",
   OPEN: "text-warning",
+  UNDER_REVIEW: "text-warning",
   DRAFT: "text-muted-2",
   // resolved-neutral
   SOLD: "text-info",
+  RESOLVED: "text-info",
   // bad
   CANCELLED: "text-error",
   DISPUTED: "text-error",
   EXPIRED: "text-error",
+  ESCALATED: "text-error",
 };
 
 const STATUS_DOT: Record<string, string> = {
@@ -29,11 +32,14 @@ const STATUS_DOT: Record<string, string> = {
   PENDING_GRADING: "bg-warning",
   PENDING_VERIFICATION: "bg-warning",
   OPEN: "bg-warning",
+  UNDER_REVIEW: "bg-warning",
   DRAFT: "bg-muted-2",
   SOLD: "bg-info",
+  RESOLVED: "bg-info",
   CANCELLED: "bg-error",
   DISPUTED: "bg-error",
   EXPIRED: "bg-error",
+  ESCALATED: "bg-error",
 };
 
 function formatStatus(status: string) {

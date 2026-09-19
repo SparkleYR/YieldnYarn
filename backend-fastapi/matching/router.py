@@ -13,6 +13,8 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from db import Listing, Order, OrderAllocation, ReputationScore, Requirement, get_db
+from grading.grade import derive_grade
+from grading.lookup import get_grading_schema_attributes, get_latest_grading_result
 from matching.allocation import Allocation, AllocationResult, ListingOffer, greedy_allocate
 from matching.schemas import AllocateRequest, FindMatchesRequest
 
@@ -22,22 +24,17 @@ router = APIRouter(prefix="/compute/matching", tags=["matching"])
 def _load_candidate_listings(db: Session, requirement: Requirement) -> list[ListingOffer]:
     """Build plain ListingOffer objects for the allocator from DB rows.
 
-    Two documented simplifications (first pass, not gold-plated):
+    Grade and geo-radius filtering are both real (§12) — grade via
+    grading/grade.py:derive_grade, geo via matching/allocation.py:haversine_km
+    against `requirement.region_lat/region_lng` + `search_radius_km`. All
+    candidate listings share `requirement.vertical_id`, so the grading
+    schema is fetched once rather than per listing.
 
-    1. Grade: §3.1 doesn't define an explicit `grade` column on `listings` —
-       a listing's grade is expected to come from the latest
-       `grading_results.attribute_scores`. Listings are passed through with
-       `grade=None` (treated as ungraded, and therefore excluded whenever the
-       requirement sets a `min_grade`) rather than aggregating
-       attribute_scores into a single letter grade. Revisit once that
-       contract solidifies.
-    2. Region: `listings`/`requirements` store location as plain lat/lng
-       floats (`location_lat`/`location_lng`, `region_lat`/`region_lng`)
-       rather than a text region label, and `requirements` has no explicit
-       search-radius field. Real geo-radius filtering (haversine distance or
-       PostGIS ST_DWithin) is a documented TODO; `region` is left unset
-       (None) on both sides for now, so `greedy_allocate`'s region filter is
-       effectively a no-op.
+    One remaining documented simplification: `price_points.region` is still
+    a free-text mandi/market label with no relationship to these lat/lng
+    coordinates (see pricing/router.py's `adjusted_price` docstring) — that
+    needs real reverse-geocoding (or a bundled district-boundary dataset),
+    neither of which this environment has, so it's left alone.
     """
     stmt = select(Listing).where(
         Listing.vertical_id == requirement.vertical_id,
@@ -48,16 +45,23 @@ def _load_candidate_listings(db: Session, requirement: Requirement) -> list[List
         stmt = stmt.where(Listing.commodity_name.ilike(requirement.commodity))
     listings = db.execute(stmt).scalars().all()
 
+    schema_attributes = get_grading_schema_attributes(db, requirement.vertical_id)
+
     offers = []
     for listing in listings:
         reputation = db.execute(select(ReputationScore.score).where(ReputationScore.user_id == listing.seller_id)).scalar()
+        latest_grading = get_latest_grading_result(db, listing.id)
+        grade, _grade_score = derive_grade(
+            latest_grading.attribute_scores if latest_grading else None, schema_attributes
+        )
         offers.append(
             ListingOffer(
                 listing_id=listing.id,
                 available_quantity=listing.quantity,
                 unit_price=listing.price_final or listing.price_suggested or 0.0,
-                grade=None,  # TODO: derive from latest grading_results attribute_scores
-                region=None,  # TODO: real lat/lng radius filtering (see docstring above)
+                grade=grade,
+                location_lat=listing.location_lat,
+                location_lng=listing.location_lng,
                 reputation_score=reputation or 0.0,
                 status=listing.status,
             )
@@ -72,7 +76,9 @@ def _run_allocation(db: Session, requirement: Requirement) -> AllocationResult:
         listings=offers,
         min_grade=requirement.min_grade or None,
         max_unit_price=requirement.max_price,
-        region=None,  # TODO: derive from requirement.region_lat/region_lng once radius filtering exists
+        center_lat=requirement.region_lat,
+        center_lng=requirement.region_lng,
+        radius_km=requirement.search_radius_km,
     )
 
 
@@ -135,6 +141,19 @@ def allocate(payload: AllocateRequest, db: Session = Depends(get_db)):
                     status="PENDING",
                 )
             )
+            # This endpoint used to create the allocation rows without ever
+            # touching the source Listing — its `quantity` stayed at the
+            # pre-allocation value forever, so the same stock could be
+            # "matched" again by a later requirement, and the listing never
+            # sold out through this path no matter how much of it was
+            # allocated. Mirrors the same decrement/SOLD logic already
+            # applied on direct bid acceptance (orders/serializers.py:
+            # BidSerializer._create_order_for_accepted_bid on the Django side).
+            listing = db.get(Listing, a.listing_id)
+            remaining = listing.quantity - a.allocated_quantity
+            listing.quantity = max(remaining, 0.0)
+            if remaining <= 0:
+                listing.status = "SOLD"
 
         requirement.status = "MATCHED" if result.fully_fulfilled else "OPEN"
         db.commit()
