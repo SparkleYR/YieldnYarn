@@ -502,12 +502,19 @@ export type BidStatus = "PENDING" | "ACCEPTED" | "REJECTED" | "COUNTERED" | "EXP
 export interface Bid {
   id: number;
   listing: number;
+  commodity_name: string;
+  unit: string;
   buyer: number;
+  buyer_name: string;
+  /** Who made this offer: the buyer for a bid, either party for a counter-offer. */
+  proposed_by: number | null;
   offered_price: string;
   offered_quantity: string;
   status: BidStatus;
   parent_bid: number | null;
   message: string;
+  /** Whose move it is while PENDING; null once settled. */
+  awaiting_response_from: "BUYER" | "SELLER" | null;
   created_at: string;
 }
 
@@ -524,6 +531,27 @@ export interface CreateBidPayload {
  * a bid is a bid either way, with `offered_price` deciding the difference. */
 export function createBid(payload: CreateBidPayload, token: string) {
   return djangoApi.post<Bid>("/orders/bids/", payload, { token });
+}
+
+/** GET /api/orders/bids/ — a buyer's own bids, including sellers' counter-offers to them. */
+export function listBids(token: string, page = 1) {
+  return djangoApi.get<Paginated<Bid>>(`/orders/bids/?page=${page}`, { token });
+}
+
+/** PATCH /api/orders/bids/{id}/ — accept/reject; only allowed for the party the offer was made to. */
+export function updateBidStatus(id: number, status: "ACCEPTED" | "REJECTED", token: string) {
+  return djangoApi.patch<Bid>(`/orders/bids/${id}/`, { status }, { token });
+}
+
+export interface CounterBidPayload {
+  offered_price: number;
+  offered_quantity?: number;
+  message?: string;
+}
+
+/** POST /api/orders/bids/{id}/counter/ — marks the offer COUNTERED and returns the new PENDING offer. */
+export function counterBid(id: number, payload: CounterBidPayload, token: string) {
+  return djangoApi.post<Bid>(`/orders/bids/${id}/counter/`, payload, { token });
 }
 
 // --- Notifications (backend-django/notifications) ----------------------------

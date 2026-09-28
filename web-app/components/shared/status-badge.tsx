@@ -6,6 +6,7 @@ const STATUS_STYLES: Record<string, string> = {
   CONFIRMED: "text-success",
   FULFILLED: "text-success",
   MATCHED: "text-success",
+  ACCEPTED: "text-success",
   // pending / neutral-warm
   PENDING: "text-warning",
   PENDING_GRADING: "text-warning",
@@ -16,11 +17,13 @@ const STATUS_STYLES: Record<string, string> = {
   // resolved-neutral
   SOLD: "text-info",
   RESOLVED: "text-info",
+  COUNTERED: "text-info",
   // bad
   CANCELLED: "text-error",
   DISPUTED: "text-error",
   EXPIRED: "text-error",
   ESCALATED: "text-error",
+  REJECTED: "text-error",
 };
 
 const STATUS_DOT: Record<string, string> = {
@@ -28,6 +31,7 @@ const STATUS_DOT: Record<string, string> = {
   CONFIRMED: "bg-success",
   FULFILLED: "bg-success",
   MATCHED: "bg-success",
+  ACCEPTED: "bg-success",
   PENDING: "bg-warning",
   PENDING_GRADING: "bg-warning",
   PENDING_VERIFICATION: "bg-warning",
@@ -36,10 +40,12 @@ const STATUS_DOT: Record<string, string> = {
   DRAFT: "bg-muted-2",
   SOLD: "bg-info",
   RESOLVED: "bg-info",
+  COUNTERED: "bg-info",
   CANCELLED: "bg-error",
   DISPUTED: "bg-error",
   EXPIRED: "bg-error",
   ESCALATED: "bg-error",
+  REJECTED: "bg-error",
 };
 
 function formatStatus(status: string) {

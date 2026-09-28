@@ -11,6 +11,7 @@ import {
   IconUsers,
   IconCurrencyRupee,
   IconClipboardCheck,
+  IconArrowsExchange,
 } from "@tabler/icons-react";
 
 export interface DashboardNavItem {
@@ -23,6 +24,7 @@ export const BUYER_NAV_ITEMS: DashboardNavItem[] = [
   { label: "Dashboard", href: "/buyer/dashboard", icon: IconLayoutDashboard },
   { label: "Catalog", href: "/buyer/catalog", icon: IconShoppingBag },
   { label: "Requirements", href: "/buyer/requirements", icon: IconClipboardList },
+  { label: "My Offers", href: "/buyer/offers", icon: IconArrowsExchange },
   { label: "Orders", href: "/buyer/orders", icon: IconPackage },
   { label: "Cost Estimator", href: "/buyer/estimate", icon: IconCalculator },
   { label: "Notifications", href: "/buyer/notifications", icon: IconBell },
