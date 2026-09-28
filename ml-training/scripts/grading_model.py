@@ -216,12 +216,15 @@ def strip_halo(crop, px: int = 3, min_keep: float = 0.3, min_pixels: int = 30):
     return crop
 
 
-def segment_kernels(image, max_side: int = 1600, min_area_frac: float = 0.15) -> list[Item]:
+def segment_kernels(image, max_side: int = 1600, min_area_frac: float = 0.15, halo_px: int = 0) -> list[Item]:
     """Cut individual kernels/particles out of a photo of a grain sample.
 
-    Mirrors how the training crops were made: threshold the red channel with
-    Otsu, take connected components, paste each component onto black, and
-    strip the background-coloured halo (`strip_halo`).
+    Threshold the red channel with Otsu, take connected components and paste
+    each component onto black. Otsu on the red channel already cuts tight to
+    the particle on a green/blue sheet, so there is no halo to strip by
+    default: eroding here as well (`halo_px`, see `strip_halo`) shrinks
+    kernels until sound ones look broken (on composites of held-out crops,
+    damaged-share error 0.14 at halo_px=0 vs 0.43 at 3 — evaluate_grader.py).
     The background may be darker or lighter than the grain — whichever side of
     the threshold covers less of the photo is treated as foreground. Tiny
     specks (below `min_area_frac` × the median component area) are dropped as
@@ -264,7 +267,7 @@ def segment_kernels(image, max_side: int = 1600, min_area_frac: float = 0.15) ->
         x1, y1 = min(w, x + bw + pad), min(h, y + bh + pad)
         crop = rgb[y0:y1, x0:x1].copy()
         crop[labels[y0:y1, x0:x1] != index] = 0
-        crop = strip_halo(crop)
+        crop = strip_halo(crop, px=halo_px) if halo_px else crop
         if crop is not None:
             items.append(Item(Image.fromarray(crop), (x0, y0, x1, y1)))
     return items
@@ -294,10 +297,34 @@ def items_for(image, analysis: dict) -> list[Item]:
     return [Item(image.convert("RGB"), (0, 0, image.width, image.height))]
 
 
+def decide(probs: Sequence[float], classes: Sequence[str], analysis: dict) -> tuple[str, float]:
+    """(label, confidence) for one item from its class probabilities.
+
+    Plain argmax, unless the analysis has a calibrated decision rule
+    {"decision": {"good_class": "0_good", "bad_threshold": t}}: then an item
+    is only called bad when P(not good) >= t (the most likely bad class is
+    the label), which trades a little recall for a false-alarm rate low
+    enough that a clean sample isn't graded down by noise. Confidence is the
+    probability of the chosen side.
+    """
+    rule = analysis.get("decision") if analysis else None
+    if rule and rule.get("good_class") in classes:
+        good = classes.index(rule["good_class"])
+        p_bad = 1.0 - probs[good]
+        if p_bad < rule["bad_threshold"]:
+            return classes[good], probs[good]
+        worst = max((i for i in range(len(classes)) if i != good), key=lambda i: probs[i])
+        return classes[worst], p_bad
+    best = max(range(len(classes)), key=lambda i: probs[i])
+    return classes[best], probs[best]
+
+
 def share_scores(labels: Sequence[str], analysis: dict) -> dict[str, dict]:
     """Per-attribute {score, bad_share, counted} from per-item predicted labels.
 
     Each attribute definition: {"bad_classes": [...], "tolerance": 0.1,
+    "floor": 0.0 (optional; bad share expected from classifier noise alone,
+    e.g. the calibrated false-alarm rate, which costs nothing),
     "of_classes": [...optional; which items count toward the denominator]}.
     """
     results = {}
@@ -308,7 +335,7 @@ def share_scores(labels: Sequence[str], analysis: dict) -> dict[str, dict]:
         bad = sum(1 for label in pool if label in spec["bad_classes"])
         share = bad / len(pool)
         results[name] = {
-            "score": round(max(0.0, min(1.0, 1.0 - share / spec["tolerance"])), 4),
+            "score": round(max(0.0, min(1.0, 1.0 - max(0.0, share - spec.get("floor", 0.0)) / spec["tolerance"])), 4),
             "bad_share": round(share, 4),
             "counted": len(pool),
         }

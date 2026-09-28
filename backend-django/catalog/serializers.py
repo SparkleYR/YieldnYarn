@@ -68,10 +68,19 @@ class ListingSerializer(serializers.ModelSerializer):
         cached = getattr(listing, "_derived_grade", None)
         if cached is not None:
             return cached
-        latest_result = listing.grading_results.order_by("-created_at").first()
+        prefetched = getattr(listing, "results_newest_first", None)  # ListingViewSet's prefetch
+        if prefetched is not None:
+            latest_result = prefetched[0] if prefetched else None
+        else:
+            latest_result = listing.grading_results.order_by("-created_at").first()
         attribute_scores = latest_result.attribute_scores if latest_result else {}
         confidence = latest_result.confidence_score if latest_result else None
-        schema = GradingSchema.objects.filter(vertical_id=listing.vertical_id).first()
+        vertical = listing._state.fields_cache.get("vertical")
+        if vertical is not None and "grading_schema" in vertical._state.fields_cache:
+            # select_related'd; None when the vertical has no schema.
+            schema = vertical._state.fields_cache["grading_schema"]
+        else:
+            schema = GradingSchema.objects.filter(vertical_id=listing.vertical_id).first()
         schema_attributes = schema.attributes if schema and schema.attributes else []
         grade, _grade_score = derive_grade(attribute_scores, schema_attributes)
         result = (grade, confidence)

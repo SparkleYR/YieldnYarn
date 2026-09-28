@@ -4,6 +4,8 @@ on:
   push:
     paths:
       - "backend-django/**"
+      - "ml-training/checkpoints/**"
+      - "ml-training/configs/**"
       - "backend-fastapi/**"
       - "ml-training/scripts/**"
       - "docs/api/**"
@@ -11,6 +13,8 @@ on:
   pull_request:
     paths:
       - "backend-django/**"
+      - "ml-training/checkpoints/**"
+      - "ml-training/configs/**"
       - "backend-fastapi/**"
       - "ml-training/scripts/**"
       - "docs/api/**"
@@ -99,7 +103,11 @@ jobs:
           python manage.py migrate
       - name: Install dependencies
         working-directory: backend-fastapi
-        run: pip install -r requirements.txt -r requirements-dev.txt
+        # CPU torch (~200 MB, not the CUDA build) so the grader-serving tests
+        # run against the checkpoints committed in ml-training/checkpoints/.
+        run: >-
+          pip install -r requirements.txt -r requirements-dev.txt -r requirements-ml.txt
+          --extra-index-url https://download.pytorch.org/whl/cpu
       - name: OpenAPI schema is up to date
         working-directory: backend-fastapi
         run: python scripts/export_openapi.py --check

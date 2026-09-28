@@ -1,0 +1,56 @@
+[
+  {
+    "endpoint": "catalog list (seller, page 1)",
+    "requests": 400,
+    "errors": 0,
+    "rps": 178.0,
+    "p50_ms": 53.7,
+    "p95_ms": 68.5,
+    "p99_ms": 100.9
+  },
+  {
+    "endpoint": "catalog search + filter",
+    "requests": 400,
+    "errors": 0,
+    "rps": 182.4,
+    "p50_ms": 52.3,
+    "p95_ms": 72.7,
+    "p99_ms": 91.3
+  },
+  {
+    "endpoint": "catalog list (buyer, ACTIVE only)",
+    "requests": 400,
+    "errors": 0,
+    "rps": 350.3,
+    "p50_ms": 28.0,
+    "p95_ms": 33.9,
+    "p99_ms": 38.6
+  },
+  {
+    "endpoint": "listing detail",
+    "requests": 400,
+    "errors": 0,
+    "rps": 265.2,
+    "p50_ms": 36.6,
+    "p95_ms": 47.6,
+    "p99_ms": 53.6
+  },
+  {
+    "endpoint": "grading trigger (Django -> FastAPI -> DB)",
+    "requests": 180,
+    "errors": 0,
+    "rps": 70.2,
+    "p50_ms": 134.4,
+    "p95_ms": 173.3,
+    "p99_ms": 214.6
+  },
+  {
+    "endpoint": "compute health",
+    "requests": 400,
+    "errors": 0,
+    "rps": 483.3,
+    "p50_ms": 11.1,
+    "p95_ms": 68.2,
+    "p99_ms": 138.5
+  }
+]

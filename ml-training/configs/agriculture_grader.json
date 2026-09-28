@@ -1,16 +1,28 @@
 {
   "mode": "kernels",
   "min_items": 15,
-  "segmentation": {"max_side": 1600, "min_area_frac": 0.15},
+  "segmentation": {
+    "max_side": 1600,
+    "min_area_frac": 0.15,
+    "halo_px": 0
+  },
   "attributes": {
     "foreign_matter": {
-      "bad_classes": ["2_foreign", "3_covered"],
-      "tolerance": 0.10,
+      "bad_classes": [
+        "2_foreign",
+        "3_covered"
+      ],
+      "tolerance": 0.1,
       "description": "Share of particles that are not wheat kernels (foreign particles, husk-covered/chaff). 0% -> 1.0, 10%+ -> 0.0."
     },
     "damaged_kernels": {
-      "bad_classes": ["1_damaged"],
-      "of_classes": ["0_sound", "1_damaged"],
+      "bad_classes": [
+        "1_damaged"
+      ],
+      "of_classes": [
+        "0_sound",
+        "1_damaged"
+      ],
       "tolerance": 0.25,
       "description": "Share of kernels that are broken or damaged. 0% -> 1.0, 25%+ -> 0.0."
     }

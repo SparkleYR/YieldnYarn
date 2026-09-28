@@ -1,4 +1,7 @@
+from io import StringIO
+
 from django.contrib.auth import get_user_model
+from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -133,3 +136,26 @@ class MissingVerticalTest(APITestCase):
         self.client.force_authenticate(user=admin)
         self.assertEqual(self.client.get("/api/config/verticals/999999/grading-schema/").status_code, 404)
         self.assertEqual(self.client.get("/api/config/verticals/999999/pricing-rules/").status_code, 404)
+
+
+class SeedVerticalsTest(TestCase):
+    def test_seeds_verticals_idempotently(self):
+        from django.core.management import call_command
+
+        call_command("seed_verticals", stdout=StringIO())
+        call_command("seed_verticals", stdout=StringIO())
+        self.assertEqual(Vertical.objects.filter(slug__in=["agriculture", "textiles"]).count(), 2)
+        agriculture = Vertical.objects.get(slug="agriculture")
+        ml = [a["name"] for a in agriculture.grading_schema.attributes if a["gradeable_by_ml"]]
+        self.assertEqual(ml, ["foreign_matter", "damaged_kernels"])
+        self.assertIn("grade_adjustment_table", agriculture.pricing_rule.rules)
+
+    def test_update_keeps_existing_vertical_but_resets_schema(self):
+        from django.core.management import call_command
+
+        vertical = Vertical.objects.create(slug="textiles", name="Fabric", unit_of_measure="metre")
+        GradingSchema.objects.create(vertical=vertical, attributes=[])
+        call_command("seed_verticals", update=True, stdout=StringIO())
+        vertical.refresh_from_db()
+        self.assertEqual(vertical.name, "Fabric")
+        self.assertEqual(vertical.grading_schema.attributes[0]["name"], "defect_rate")

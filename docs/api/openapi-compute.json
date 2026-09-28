@@ -264,6 +264,24 @@
     "/compute/grading/grade": {
       "post": {
         "operationId": "trigger_grading_compute_grading_grade_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-internal-token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Token"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -314,6 +332,22 @@
               "title": "Listing Id",
               "type": "integer"
             }
+          },
+          {
+            "in": "header",
+            "name": "x-internal-token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Token"
+            }
           }
         ],
         "responses": {
@@ -347,6 +381,24 @@
     "/compute/matching/allocate": {
       "post": {
         "operationId": "allocate_compute_matching_allocate_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-internal-token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Token"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -386,6 +438,24 @@
     "/compute/matching/find": {
       "post": {
         "operationId": "find_matches_compute_matching_find_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-internal-token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Token"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {

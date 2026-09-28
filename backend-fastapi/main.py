@@ -10,7 +10,7 @@ import os
 from contextlib import asynccontextmanager
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from grading.router import router as grading_router
@@ -19,6 +19,7 @@ from pricing.router import router as pricing_router
 from scheduler.jobs import expire_stale_listings, ingest_agmarknet_prices
 
 from db import settings
+from internal_auth import require_internal_token
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("msme-fastapi")
@@ -73,9 +74,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(grading_router)
+# Grading and matching write to the database and are called only by Django;
+# pricing is public read-only data for the web and seller apps.
+internal_only = [Depends(require_internal_token)]
+app.include_router(grading_router, dependencies=internal_only)
 app.include_router(pricing_router)
-app.include_router(matching_router)
+app.include_router(matching_router, dependencies=internal_only)
 
 
 @app.get("/health")

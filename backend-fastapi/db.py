@@ -86,6 +86,11 @@ class Settings(BaseSettings):
     EVIDENCE_URL_QUERY: str = ""
     # Error tracking (implementation_plan.md §11); on when set.
     SENTRY_DSN: str = ""
+    # Shared secret Django sends as X-Internal-Token on the state-changing
+    # grading/matching calls. Set it whenever this service is reachable from
+    # outside (it is on Azure: the browser and app call /compute/pricing
+    # directly). Empty = not enforced (local dev, tests).
+    COMPUTE_INTERNAL_TOKEN: str = ""
 
 
 settings = Settings()

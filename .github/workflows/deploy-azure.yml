@@ -1,0 +1,153 @@
+name: Deploy to Azure
+
+# Manual deploy of the whole stack to Azure Container Apps (infra/azure/).
+#
+# One-time setup (see infra/azure/README.md):
+#   secrets  AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID   (OIDC federated credential)
+#            DB_ADMIN_PASSWORD, DJANGO_SECRET_KEY, COMPUTE_INTERNAL_TOKEN
+#            GHCR_PULL_TOKEN      (classic PAT with read:packages; Azure pulls the images with it)
+#            AGMARKNET_API_KEY, SENTRY_DSN   (optional)
+#   variables AZURE_RESOURCE_GROUP (default msme-rg), AZURE_LOCATION (default centralindia)
+on:
+  workflow_dispatch:
+    inputs:
+      prefix:
+        description: Resource name prefix
+        default: msme
+        required: true
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+concurrency:
+  group: deploy-azure
+  cancel-in-progress: false
+
+env:
+  RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP || 'msme-rg' }}
+  LOCATION: ${{ vars.AZURE_LOCATION || 'centralindia' }}
+  PREFIX: ${{ inputs.prefix }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Image names
+        run: |
+          echo "IMAGE_PREFIX=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+          echo "TAG=${GITHUB_SHA::12}" >> "$GITHUB_ENV"
+
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push django
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: backend-django/Dockerfile
+          push: true
+          tags: ${{ env.IMAGE_PREFIX }}/django:${{ env.TAG }}
+          cache-from: type=gha,scope=django
+          cache-to: type=gha,mode=max,scope=django
+
+      - name: Build and push fastapi
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: backend-fastapi/Dockerfile
+          push: true
+          tags: ${{ env.IMAGE_PREFIX }}/fastapi:${{ env.TAG }}
+          cache-from: type=gha,scope=fastapi
+          cache-to: type=gha,mode=max,scope=fastapi
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Infrastructure + backends
+        id: infra
+        env:
+          DB_ADMIN_PASSWORD: ${{ secrets.DB_ADMIN_PASSWORD }}
+          DJANGO_SECRET_KEY: ${{ secrets.DJANGO_SECRET_KEY }}
+          COMPUTE_INTERNAL_TOKEN: ${{ secrets.COMPUTE_INTERNAL_TOKEN }}
+          AGMARKNET_API_KEY: ${{ secrets.AGMARKNET_API_KEY }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
+        run: |
+          az group create -n "$RESOURCE_GROUP" -l "$LOCATION" -o none
+          # Keep whatever the web app currently runs until its new image is built.
+          web_image=$(az containerapp show -g "$RESOURCE_GROUP" -n "$PREFIX-web" \
+            --query "properties.template.containers[0].image" -o tsv 2>/dev/null || true)
+          echo "web_image=${web_image:-mcr.microsoft.com/k8se/quickstart:latest}" >> "$GITHUB_OUTPUT"
+          deploy() {
+            az deployment group create -g "$RESOURCE_GROUP" -f infra/azure/main.bicep \
+              --name "msme-$GITHUB_RUN_ID-$1" --query properties.outputs -o json \
+              -p prefix="$PREFIX" \
+                 djangoImage="$IMAGE_PREFIX/django:$TAG" \
+                 fastapiImage="$IMAGE_PREFIX/fastapi:$TAG" \
+                 webImage="$2" \
+                 registryServer=ghcr.io registryUsername="$GITHUB_ACTOR" registryPassword="$GHCR_PULL_TOKEN" \
+                 dbAdminPassword="$DB_ADMIN_PASSWORD" djangoSecretKey="$DJANGO_SECRET_KEY" \
+                 computeInternalToken="$COMPUTE_INTERNAL_TOKEN" \
+                 agmarknetApiKey="$AGMARKNET_API_KEY" sentryDsn="$SENTRY_DSN"
+          }
+          deploy infra "${web_image:-mcr.microsoft.com/k8se/quickstart:latest}" > outputs.json
+          echo "django_api_url=$(jq -r .djangoApiUrl.value outputs.json)" >> "$GITHUB_OUTPUT"
+          echo "fastapi_url=$(jq -r .fastapiUrl.value outputs.json)" >> "$GITHUB_OUTPUT"
+          declare -f deploy > deploy.sh
+
+      # Next.js compiles NEXT_PUBLIC_* into the bundle, so the web image can
+      # only be built once the API URLs above are known.
+      - name: Build and push web
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: web-app/Dockerfile
+          push: true
+          tags: ${{ env.IMAGE_PREFIX }}/web:${{ env.TAG }}
+          build-args: |
+            NEXT_PUBLIC_DJANGO_API_URL=${{ steps.infra.outputs.django_api_url }}
+            NEXT_PUBLIC_FASTAPI_URL=${{ steps.infra.outputs.fastapi_url }}
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,mode=max,scope=web
+
+      - name: Web app
+        env:
+          DB_ADMIN_PASSWORD: ${{ secrets.DB_ADMIN_PASSWORD }}
+          DJANGO_SECRET_KEY: ${{ secrets.DJANGO_SECRET_KEY }}
+          COMPUTE_INTERNAL_TOKEN: ${{ secrets.COMPUTE_INTERNAL_TOKEN }}
+          AGMARKNET_API_KEY: ${{ secrets.AGMARKNET_API_KEY }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
+        run: |
+          source deploy.sh
+          deploy web "$IMAGE_PREFIX/web:$TAG" > outputs.json
+          jq . outputs.json
+
+      - name: Smoke test
+        run: |
+          api="$(jq -r .djangoApiUrl.value outputs.json)"
+          compute="$(jq -r .fastapiUrl.value outputs.json)"
+          web="$(jq -r .webUrl.value outputs.json)"
+          # Scale-from-zero plus first-boot migrations can take a minute.
+          for url in "$api/schema/" "${compute%/compute}/health" "$web/"; do
+            for i in $(seq 1 30); do
+              code=$(curl -s -o /dev/null -w "%{http_code}" "$url") && [ "$code" = 200 ] && break
+              sleep 10
+            done
+            echo "$url -> $code"
+            [ "$code" = 200 ]
+          done
+          echo "### Deployed :rocket:" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Web: $web" >> "$GITHUB_STEP_SUMMARY"
+          echo "- API docs: $api/docs/" >> "$GITHUB_STEP_SUMMARY"

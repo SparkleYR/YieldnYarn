@@ -6,6 +6,7 @@ checkpoint through ml-training's grading_model.py and serve it — they need
 requirements-ml.txt and are skipped without it.
 """
 import importlib.util
+import sys
 from pathlib import Path
 
 import pytest
@@ -68,6 +69,7 @@ def trained_models_dir(tmp_path, monkeypatch):
     pytest.importorskip("torchvision")
     spec = importlib.util.spec_from_file_location("grading_model_for_tests", _GRADING_MODEL_PATH)
     grading_model = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = grading_model
     spec.loader.exec_module(grading_model)
 
     classes = ["0_clean", "1_minor", "2_heavy"]
@@ -141,3 +143,58 @@ def test_evidence_missing_locally_is_downloaded_from_blob_storage(tmp_path, monk
         downloaded_dir = Path(paths[0]).parent
     assert requested[0] == "https://acct.blob.core.windows.net/media/grading_evidence/listing_1/a.jpg?sv=2024&sig=abc"
     assert not downloaded_dir.exists()  # temp files are cleaned up after grading
+
+
+def _grading_model_pure():
+    """grading_model.py imports torch/cv2 lazily, so its pure helpers load anywhere."""
+    spec = importlib.util.spec_from_file_location("grading_model_pure", _GRADING_MODEL_PATH)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module  # @dataclass looks its module up here
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_decide_is_argmax_without_a_decision_rule():
+    gm = _grading_model_pure()
+    assert gm.decide([0.2, 0.5, 0.3], ["good", "hole", "oil"], {}) == ("hole", 0.5)
+
+
+def test_calibrated_threshold_keeps_uncertain_items_good():
+    gm = _grading_model_pure()
+    analysis = {"decision": {"good_class": "good", "bad_threshold": 0.8}}
+    classes = ["good", "hole", "oil"]
+    # argmax says "hole", but P(not good) = 0.7 < 0.8
+    assert gm.decide([0.3, 0.4, 0.3], classes, analysis) == ("good", 0.3)
+    label, confidence = gm.decide([0.1, 0.3, 0.6], classes, analysis)
+    assert label == "oil" and confidence == pytest.approx(0.9)
+
+
+def test_share_below_the_noise_floor_costs_nothing():
+    gm = _grading_model_pure()
+    analysis = {"attributes": {"defect_rate": {"bad_classes": ["hole"], "tolerance": 0.1, "floor": 0.02}}}
+    clean = ["good"] * 98 + ["hole"] * 2
+    dirty = ["good"] * 88 + ["hole"] * 12
+    assert gm.share_scores(clean, analysis)["defect_rate"]["score"] == 1.0
+    assert gm.share_scores(dirty, analysis)["defect_rate"]["score"] == 0.0
+
+
+@pytest.mark.parametrize(
+    ("vertical", "attributes", "mode"),
+    [("agriculture", {"foreign_matter", "damaged_kernels"}, "kernels"), ("textiles", {"defect_rate"}, "patches")],
+)
+def test_bundled_graders_load_and_route_to_verification(vertical, attributes, mode, monkeypatch):
+    """The checkpoints committed under ml-training/checkpoints/ must load
+    through the serving path (with the ML stack installed) and keep their
+    confidence capped below the verification threshold."""
+    pytest.importorskip("torch")
+    pytest.importorskip("timm")
+    from grading.classifier import load_grader
+    from grading.pipeline import CONFIDENCE_VERIFICATION_THRESHOLD
+
+    monkeypatch.setattr(db_module.settings, "GRADING_MODELS_DIR", "")
+    grader = load_grader(vertical)
+    assert grader is not None
+    assert grader.attributes == attributes
+    assert grader.analysis["mode"] == mode
+    assert "decision" in grader.analysis  # calibrated by evaluate_grader.py --write
+    assert grader.confidence_cap < CONFIDENCE_VERIFICATION_THRESHOLD

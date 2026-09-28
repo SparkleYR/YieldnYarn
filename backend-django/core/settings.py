@@ -271,6 +271,9 @@ CORS_ALLOW_HEADERS = (
 
 # Base URL of the FastAPI compute service (grading/pricing/matching).
 FASTAPI_BASE_URL = env("FASTAPI_BASE_URL", "http://localhost:8001")
+# Sent as X-Internal-Token on grading/matching calls; must match FastAPI's
+# COMPUTE_INTERNAL_TOKEN (required there whenever it is set).
+COMPUTE_INTERNAL_TOKEN = env("COMPUTE_INTERNAL_TOKEN", "")
 
 # Base URL of the Next.js web app — used to build the link inside a
 # password-reset email (accounts/views.py:PasswordResetRequestView).

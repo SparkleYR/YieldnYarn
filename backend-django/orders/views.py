@@ -55,6 +55,7 @@ class RequirementViewSet(viewsets.ModelViewSet):
             response = httpx.post(
                 f"{settings.FASTAPI_BASE_URL}/compute/matching/allocate",
                 json={"requirement_id": requirement.id},
+                headers={"X-Internal-Token": settings.COMPUTE_INTERNAL_TOKEN},
                 timeout=30.0,
             )
         except httpx.HTTPError as exc:

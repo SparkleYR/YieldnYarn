@@ -1,0 +1,24 @@
+{
+  "calibration": {
+    "target_false_alarm_rate": 0.02,
+    "bad_threshold": 0.7848,
+    "fitted_on_photos": 40
+  },
+  "val_photos": 40,
+  "photos_with_a_defect_flagged": 1.0,
+  "patch_defect_recall": 0.402,
+  "patch_defect_precision": 0.848,
+  "good_patch_false_alarm_rate": 0.0187,
+  "mean_abs_share_error": 0.1245,
+  "item_level_val": {
+    "accuracy": 0.7006769825918762,
+    "balanced_accuracy": 0.5702899271791546,
+    "per_class_recall": [
+      0.8380077369439072,
+      0.5094850948509485,
+      0.5152510558423276,
+      0.5922671353251318,
+      0.3964386129334583
+    ]
+  }
+}

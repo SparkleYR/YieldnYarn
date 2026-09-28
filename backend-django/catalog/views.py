@@ -1,6 +1,7 @@
 import httpx
 from django.conf import settings
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db.models import Prefetch
 from drf_spectacular.utils import extend_schema, inline_serializer
 from rest_framework import parsers, serializers, status, viewsets
 from rest_framework.decorators import action
@@ -38,7 +39,18 @@ class ListingViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        qs = Listing.objects.select_related("seller", "vertical").all()
+        # Everything ListingSerializer reads per row (seller name, latest
+        # grading result, the vertical's schema for the letter grade) comes
+        # in a constant number of queries instead of three per listing.
+        qs = Listing.objects.select_related(
+            "seller", "seller__profile", "vertical", "vertical__grading_schema"
+        ).prefetch_related(
+            Prefetch(
+                "grading_results",
+                queryset=GradingResult.objects.order_by("-created_at"),
+                to_attr="results_newest_first",
+            )
+        )
 
         if not user.is_authenticated:
             return qs.filter(status=Listing.Status.ACTIVE)
@@ -116,6 +128,7 @@ class ListingViewSet(viewsets.ModelViewSet):
             response = httpx.post(
                 f"{settings.FASTAPI_BASE_URL}/compute/grading/grade",
                 json={"listing_id": listing.id},
+                headers={"X-Internal-Token": settings.COMPUTE_INTERNAL_TOKEN},
                 timeout=30.0,
             )
         except httpx.HTTPError as exc:

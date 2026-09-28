@@ -1,12 +1,22 @@
 {
   "mode": "patches",
   "min_items": 20,
-  "tiling": {"patch": 64, "stride": 64, "long_side": 768},
+  "tiling": {
+    "patch": 64,
+    "stride": 64,
+    "long_side": 768
+  },
   "attributes": {
     "defect_rate": {
-      "bad_classes": ["1_hole", "2_objects", "3_oil_spot", "4_thread_error"],
-      "tolerance": 0.05,
-      "description": "Share of 64px fabric patches showing a hole, foreign object, oil spot or thread error. 0% -> 1.0, 5%+ -> 0.0."
+      "bad_classes": [
+        "1_hole",
+        "2_objects",
+        "3_oil_spot",
+        "4_thread_error"
+      ],
+      "tolerance": 0.1,
+      "description": "Share of 64px fabric patches showing a hole, foreign object, oil spot or thread error. Up to 2% (the calibrated false-alarm rate) -> 1.0, 12%+ -> 0.0. After training, run evaluate_grader.py --calibrate-false-alarm 0.02 --write to fit the checkpoint's bad-patch threshold.",
+      "floor": 0.02
     }
   }
 }

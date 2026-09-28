@@ -291,6 +291,13 @@ class GradingTriggerTest(APITestCase):
             mock_post.call_args.kwargs["json"], {"listing_id": self.listing.id}
         )
 
+    @override_settings(COMPUTE_INTERNAL_TOKEN="s3cret")
+    @patch("catalog.views.httpx.post")
+    def test_trigger_grading_sends_internal_token(self, mock_post):
+        mock_post.return_value = MagicMock(status_code=200, json=lambda: {"needs_verification": True})
+        self.client.post(self.url)
+        self.assertEqual(mock_post.call_args.kwargs["headers"], {"X-Internal-Token": "s3cret"})
+
     @patch("catalog.views.httpx.post")
     def test_trigger_grading_activates_listing_when_confidence_is_high(self, mock_post):
         # Regression check: FastAPI's grading endpoint only ever writes a
@@ -649,3 +656,41 @@ class OfflineSyncCreateTest(APITestCase):
         )
 
         self.assertIn(response.status_code, (status.HTTP_403_FORBIDDEN, status.HTTP_404_NOT_FOUND))
+
+
+class ListingListQueryCountTest(APITestCase):
+    """The list endpoint's query count must not grow with the page size
+    (it did: three extra queries per listing for grade and seller name)."""
+
+    def _add_listings(self, n):
+        for i in range(n):
+            listing = Listing.objects.create(
+                seller=self.seller, vertical=self.vertical, commodity_name=f"Wheat {i}",
+                quantity=10, unit="quintal", price_suggested=2000,
+            )
+            GradingResult.objects.create(listing=listing, attribute_scores={"foreign_matter": 0.9}, confidence_score=0.9)
+
+    def setUp(self):
+        self.seller = User.objects.create_user(email="qc-seller@example.com", password="pw12345", role="SELLER")
+        self.vertical = Vertical.objects.create(name="Agriculture", slug="agriculture-qc", unit_of_measure="quintal")
+        GradingSchema.objects.create(
+            vertical=self.vertical, attributes=[{"name": "foreign_matter", "weight": 1.0, "gradeable_by_ml": True}]
+        )
+        self.client.force_authenticate(user=self.seller)
+
+    def _queries_for_list(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        with CaptureQueriesContext(connection) as ctx:
+            response = self.client.get("/api/catalog/listings/")
+        self.assertEqual(response.status_code, 200)
+        return len(ctx.captured_queries), response
+
+    def test_query_count_is_constant_in_page_size(self):
+        self._add_listings(2)
+        few, _ = self._queries_for_list()
+        self._add_listings(15)
+        many, response = self._queries_for_list()
+        self.assertEqual(few, many)
+        self.assertEqual(response.data["results"][0]["grade"], "Grade A")

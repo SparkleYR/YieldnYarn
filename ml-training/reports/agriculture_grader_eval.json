@@ -1,0 +1,27 @@
+{
+  "calibration": {
+    "target_false_alarm_rate": 0.1,
+    "bad_threshold": 0.8879,
+    "fitted_on_items": 607
+  },
+  "samples": 40,
+  "segmentation_found_vs_placed": 0.903,
+  "mean_abs_share_error": {
+    "foreign_matter": 0.0255,
+    "damaged_kernels": 0.1252
+  },
+  "clean_sample_mean_bad_share": {
+    "foreign_matter": 0.0,
+    "damaged_kernels": 0.0171
+  },
+  "item_level_val": {
+    "accuracy": 0.7109004739336493,
+    "balanced_accuracy": 0.5792148022917254,
+    "per_class_recall": [
+      0.8757396449704142,
+      0.22857142857142856,
+      0.6333333333333333,
+      null
+    ]
+  }
+}

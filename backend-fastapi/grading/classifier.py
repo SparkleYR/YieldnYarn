@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import importlib.util
 import logging
+import sys
 import threading
 from dataclasses import dataclass
 from pathlib import Path
@@ -131,8 +132,7 @@ class VerticalGrader:
             for start in range(0, len(images), self.BATCH):
                 batch = self._torch.stack([self._transform(img) for img in images[start : start + self.BATCH]])
                 probs = self._torch.softmax(self._model(batch), dim=1)
-                top, index = probs.max(dim=1)
-                results += [(self.classes[i], float(p)) for i, p in zip(index.tolist(), top.tolist())]
+                results += [self._gm.decide(row, self.classes, self.analysis) for row in probs.tolist()]
         return results
 
     def analyze(self, image_paths: list[str]) -> Optional[GraderResult]:
@@ -193,11 +193,21 @@ _cache: dict[Path, tuple[float, object]] = {}
 
 
 def _load_model_module():
-    spec = importlib.util.spec_from_file_location("ml_training_grading_model", _MODEL_MODULE_PATH)
+    name = "ml_training_grading_model"
+    if name in sys.modules:
+        return sys.modules[name]
+    spec = importlib.util.spec_from_file_location(name, _MODEL_MODULE_PATH)
     if spec is None or spec.loader is None:
         raise ImportError(f"cannot load {_MODEL_MODULE_PATH}")
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    # Registered before executing: @dataclass (grading_model.Item) resolves
+    # its own module through sys.modules and fails without it.
+    sys.modules[name] = module
+    try:
+        spec.loader.exec_module(module)
+    except BaseException:
+        del sys.modules[name]
+        raise
     return module
 
 

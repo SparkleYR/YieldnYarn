@@ -43,6 +43,7 @@ services:
       DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,django
       CORS_ALLOWED_ORIGINS: http://localhost:3000
       FASTAPI_BASE_URL: http://fastapi:8001
+      COMPUTE_INTERNAL_TOKEN: ${COMPUTE_INTERNAL_TOKEN:-compose-only-internal-token}
       FRONTEND_URL: http://localhost:3000
       # Plain HTTP on localhost: the refresh cookie can't be Secure here.
       REFRESH_COOKIE_SECURE: "False"
