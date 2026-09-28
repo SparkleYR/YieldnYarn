@@ -9,8 +9,14 @@ changing the route contracts.
 """
 from __future__ import annotations
 
+import logging
+import tempfile
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Iterator
+
+import httpx
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
@@ -40,6 +46,46 @@ def resolve_evidence_path(stored: str) -> str:
     return str(media_root / path)
 
 
+logger = logging.getLogger("grading.router")
+
+
+@contextmanager
+def local_evidence(stored_paths: list[str]) -> Iterator[list[str]]:
+    """Local file paths for the evidence, downloading any that aren't on disk.
+
+    In local dev (and docker-compose) Django and this service share the media
+    directory. On Azure, Django stores evidence in Blob Storage: set
+    EVIDENCE_BASE_URL (the container URL) and, for a private container,
+    EVIDENCE_URL_QUERY (a read-only SAS token), and the files are fetched to a
+    temporary directory for the duration of grading. Files that can't be
+    found either way are skipped (grading then falls back / routes to a
+    verifier rather than failing).
+    """
+    with tempfile.TemporaryDirectory(prefix="msme-evidence-") as tmp:
+        paths: list[str] = []
+        for stored in stored_paths:
+            local = resolve_evidence_path(stored)
+            if Path(local).exists():
+                paths.append(local)
+                continue
+            if not settings.EVIDENCE_BASE_URL:
+                logger.warning("Evidence %s not found at %s and no EVIDENCE_BASE_URL set", stored, local)
+                continue
+            url = f"{settings.EVIDENCE_BASE_URL.rstrip('/')}/{stored.lstrip('/')}"
+            if settings.EVIDENCE_URL_QUERY:
+                url += "?" + settings.EVIDENCE_URL_QUERY.lstrip("?")
+            try:
+                response = httpx.get(url, timeout=30.0)
+                response.raise_for_status()
+            except httpx.HTTPError as exc:
+                logger.warning("Could not download evidence %s: %s", stored, exc)
+                continue
+            target = Path(tmp) / f"{len(paths)}_{Path(stored).name}"
+            target.write_bytes(response.content)
+            paths.append(str(target))
+        yield paths
+
+
 def _ml_attribute_names(attributes: list[dict]) -> list[str]:
     """Names of attributes flagged `gradeable_by_ml: true` in the vertical's grading_schema."""
     return [a["name"] for a in attributes if a.get("gradeable_by_ml")]
@@ -53,14 +99,15 @@ def trigger_grading(payload: GradeRequest, db: Session = Depends(get_db)) -> Gra
             raise HTTPException(status_code=404, detail="listing not found")
 
         evidence = db.execute(select(GradingEvidence).where(GradingEvidence.listing_id == listing.id)).scalars().all()
-        evidence_paths = [resolve_evidence_path(e.file) for e in evidence if e.file_type == "IMAGE"]
+        stored_evidence = [e.file for e in evidence if e.file_type == "IMAGE"]
         vertical = db.get(Vertical, listing.vertical_id)
         schema_attributes = get_grading_schema_attributes(db, listing.vertical_id)
         ml_attributes = _ml_attribute_names(schema_attributes)
     except SQLAlchemyError as exc:
         raise HTTPException(status_code=503, detail=f"Database not ready: {exc}") from exc
 
-    grading = grade_attributes(evidence_paths, ml_attributes, vertical.slug if vertical else None)
+    with local_evidence(stored_evidence) as evidence_paths:
+        grading = grade_attributes(evidence_paths, ml_attributes, vertical.slug if vertical else None)
     grade, _grade_score = derive_grade(grading["attribute_scores"], schema_attributes)
 
     persistence_error: str | None = None

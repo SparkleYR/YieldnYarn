@@ -1,0 +1,12 @@
+.git
+**/.venv
+**/__pycache__
+**/node_modules
+web-app/.next
+web-app/test-results
+backend-django/media
+backend-django/staticfiles
+ml-training/data
+ml-training/external
+seller-app
+docs

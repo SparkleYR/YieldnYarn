@@ -99,11 +99,25 @@ class GraderResult:
 class VerticalGrader:
     BATCH = 64
 
-    def __init__(self, model, classes: list[str], transform, analysis: dict, grading_model, torch_module):
+    def __init__(
+        self,
+        model,
+        classes: list[str],
+        transform,
+        analysis: dict,
+        grading_model,
+        torch_module,
+        confidence_cap: float = 1.0,
+    ):
         self._model = model
         self.classes = classes
         self._transform = transform
         self.analysis = analysis
+        # A model can't be more sure of a sample than it proved to be on
+        # held-out photos: its validated balanced accuracy caps the confidence
+        # it reports, so a weak model routes to verifiers instead of
+        # auto-approving listings.
+        self.confidence_cap = confidence_cap
         self._gm = grading_model
         self._torch = torch_module
 
@@ -143,7 +157,7 @@ class VerticalGrader:
         # means a less representative sample: scale confidence down so it
         # goes to a verifier.
         coverage = min(1.0, len(predictions) / self.analysis.get("min_items", 1))
-        confidence = round(mean(p for _, p in predictions) * coverage, 4)
+        confidence = round(min(mean(p for _, p in predictions) * coverage, self.confidence_cap), 4)
         return GraderResult(
             scores={name: d["score"] for name, d in details.items()},
             confidence=confidence,
@@ -219,6 +233,12 @@ def _transform_for(checkpoint: dict, grading_model):
     )
 
 
+def _validated_cap(checkpoint: dict) -> float:
+    metrics = (checkpoint.get("metadata") or {}).get("val_metrics") or {}
+    value = metrics.get("balanced_accuracy")
+    return float(value) if isinstance(value, (int, float)) and value > 0 else 1.0
+
+
 def load_grader(vertical_slug: Optional[str]) -> Optional[VerticalGrader]:
     """The vertical's multi-attribute grader (`grader.pt`), if one is installed."""
     if not vertical_slug:
@@ -232,6 +252,7 @@ def load_grader(vertical_slug: Optional[str]) -> Optional[VerticalGrader]:
             analysis=checkpoint.get("analysis") or {"mode": "image"},
             grading_model=grading_model,
             torch_module=torch,
+            confidence_cap=_validated_cap(checkpoint),
         )
 
     return _load_checkpoint(models_dir() / vertical_slug / "grader.pt", build)

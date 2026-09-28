@@ -43,6 +43,10 @@ interface SellerApi {
     @POST("auth/refresh/")
     suspend fun refresh(@Body body: RefreshRequest): Response<TokenPair>
 
+    /** Revokes (blacklists) the refresh token server-side. */
+    @POST("auth/logout/")
+    suspend fun logout(@Body body: RefreshRequest): Response<Unit>
+
     @GET("auth/me/")
     suspend fun me(): Response<User>
 

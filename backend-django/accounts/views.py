@@ -8,10 +8,13 @@ from django.db.models import Sum
 from django.utils import timezone
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
-from rest_framework import generics, permissions, status, viewsets
+from drf_spectacular.utils import OpenApiResponse, extend_schema, inline_serializer
+from rest_framework import generics, permissions, serializers, status, viewsets
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from catalog.models import Listing
 from core.permissions import IsAdmin
@@ -38,13 +41,108 @@ class RegisterView(generics.CreateAPIView):
     permission_classes = [permissions.AllowAny]
 
 
+def _cookie_mode(request) -> bool:
+    """The web app opts in with `X-Auth-Mode: cookie`; everyone else (the
+    Android app, scripts) keeps getting the refresh token in the body."""
+    return request.headers.get("X-Auth-Mode", "").lower() == "cookie"
+
+
+def _set_refresh_cookie(response, refresh: str):
+    response.set_cookie(
+        settings.REFRESH_COOKIE_NAME,
+        refresh,
+        max_age=int(settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"].total_seconds()),
+        path=settings.REFRESH_COOKIE_PATH,
+        secure=settings.REFRESH_COOKIE_SECURE,
+        httponly=True,
+        samesite=settings.REFRESH_COOKIE_SAMESITE,
+    )
+
+
+def _clear_refresh_cookie(response):
+    response.delete_cookie(
+        settings.REFRESH_COOKIE_NAME,
+        path=settings.REFRESH_COOKIE_PATH,
+        samesite=settings.REFRESH_COOKIE_SAMESITE,
+    )
+
+
+def _move_refresh_to_cookie(request, response):
+    refresh = response.data.get("refresh") if isinstance(response.data, dict) else None
+    if response.status_code == 200 and refresh and _cookie_mode(request):
+        _set_refresh_cookie(response, refresh)
+        del response.data["refresh"]
+    return response
+
+
 class LoginView(TokenObtainPairView):
-    """POST /api/auth/login/ -> JWT access + refresh tokens."""
+    """POST /api/auth/login/ -> JWT access + refresh tokens.
+
+    With `X-Auth-Mode: cookie` the refresh token is set as an httpOnly cookie
+    instead of returned in the body.
+    """
 
     serializer_class = MyTokenObtainPairSerializer
     permission_classes = [permissions.AllowAny]
 
+    def post(self, request, *args, **kwargs):
+        return _move_refresh_to_cookie(request, super().post(request, *args, **kwargs))
 
+
+class CookieTokenRefreshView(TokenRefreshView):
+    """POST /api/auth/refresh/ — body `{refresh}` (app) or the refresh cookie (web).
+
+    Refresh tokens rotate and the old one is blacklisted, so a leaked refresh
+    token stops working the next time the real client refreshes.
+    """
+
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        data = request.data
+        if not data.get("refresh"):
+            cookie = request.COOKIES.get(settings.REFRESH_COOKIE_NAME)
+            if cookie:
+                data = {"refresh": cookie}
+        if not data.get("refresh"):
+            # Not signed in (no cookie, no body token) — 401 like any other
+            # dead session, rather than a 400 about a missing field.
+            return Response({"detail": "No refresh token."}, status=status.HTTP_401_UNAUTHORIZED)
+        serializer = self.get_serializer(data=data)
+        try:
+            serializer.is_valid(raise_exception=True)
+        except (TokenError, InvalidToken) as exc:
+            response = Response({"detail": str(exc)}, status=status.HTTP_401_UNAUTHORIZED)
+            if _cookie_mode(request):
+                _clear_refresh_cookie(response)
+            return response
+        response = Response(serializer.validated_data, status=status.HTTP_200_OK)
+        return _move_refresh_to_cookie(request, response)
+
+
+@extend_schema(
+    request=inline_serializer("LogoutRequest", {"refresh": serializers.CharField(required=False)}),
+    responses={204: OpenApiResponse(description="Logged out")},
+)
+class LogoutView(APIView):
+    """POST /api/auth/logout/ — revoke the refresh token (body or cookie) and
+    clear the cookie. Always 204: logging out twice isn't an error."""
+
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        refresh = request.data.get("refresh") or request.COOKIES.get(settings.REFRESH_COOKIE_NAME)
+        if refresh:
+            try:
+                RefreshToken(refresh).blacklist()
+            except TokenError:
+                pass  # already expired/blacklisted/garbage: nothing to revoke
+        response = Response(status=status.HTTP_204_NO_CONTENT)
+        _clear_refresh_cookie(response)
+        return response
+
+
+@extend_schema(request=MeUpdateSerializer, responses=UserSerializer)
 class MeView(APIView):
     """GET /api/auth/me/, PATCH /api/auth/me/ (phone + profile fields)"""
 
@@ -62,6 +160,10 @@ class MeView(APIView):
         return Response(UserSerializer(user).data)
 
 
+_Detail = inline_serializer("Detail", {"detail": serializers.CharField()})
+
+
+@extend_schema(request=PasswordResetRequestSerializer, responses=_Detail)
 class PasswordResetRequestView(APIView):
     """POST /api/auth/password-reset/  {email}
 
@@ -107,6 +209,7 @@ class PasswordResetRequestView(APIView):
         )
 
 
+@extend_schema(request=PasswordResetConfirmSerializer, responses={200: _Detail, 400: _Detail})
 class PasswordResetConfirmView(APIView):
     """POST /api/auth/password-reset/confirm/  {uid, token, new_password}"""
 
@@ -153,6 +256,18 @@ class AdminUserViewSet(viewsets.ModelViewSet):
 REVENUE_STATUSES = (Order.Status.CONFIRMED, Order.Status.FULFILLED)
 
 
+@extend_schema(
+    responses=inline_serializer(
+        "PlatformStats",
+        {
+            "total_listings": serializers.IntegerField(),
+            "total_orders": serializers.IntegerField(),
+            "total_users": serializers.IntegerField(),
+            "revenue": serializers.DecimalField(max_digits=16, decimal_places=2),
+            "revenue_delta_pct": serializers.FloatField(allow_null=True),
+        },
+    )
+)
 class AdminStatsView(APIView):
     """GET /api/auth/admin/stats/  (Admin only)
 

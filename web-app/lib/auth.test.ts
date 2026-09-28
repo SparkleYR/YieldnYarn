@@ -23,10 +23,12 @@ describe("session storage (lib/auth.ts)", () => {
     expect(getStoredUser()).toBeNull();
   });
 
-  it("round-trips tokens and user through setSession/getStored*", () => {
+  it("round-trips the access token and user, but never persists a refresh token", () => {
     setSession(tokens, user);
 
-    expect(getStoredTokens()).toEqual(tokens);
+    // The refresh token belongs in the httpOnly cookie, not in script-readable storage.
+    expect(getStoredTokens()).toEqual({ access: "access-token" });
+    expect(window.localStorage.getItem("msme.auth.tokens")).not.toContain("refresh-token");
     expect(getStoredUser()).toEqual(user);
   });
 

@@ -1,16 +1,18 @@
 "use client";
 
 /**
- * Client-side JWT session storage.
+ * Client-side session.
  *
- * Tokens live in `localStorage` so they survive a refresh without an extra
- * round trip. This is a pragmatic default for the local/dev build — the
- * plan's long-term target (implementation_plan.md §10.1) is an httpOnly
- * refresh cookie issued by Django, which needs a backend change and should
- * land before this ships anywhere internet-facing.
+ * The long-lived refresh token is an httpOnly cookie set by Django
+ * (implementation_plan.md §10.1) — script can't read it, so an XSS bug can't
+ * steal a session that outlives the access token. Only the short-lived
+ * access token and the user profile are kept in `localStorage` (so a reload
+ * doesn't need a round trip). When the access token expires, API calls
+ * refresh it through the cookie and retry (lib/api.ts); when that fails the
+ * session is cleared and the dashboard layouts send the user to /login.
  */
 
-import type { AuthTokens, User } from "./api";
+import { logoutSession, refreshAccessToken, setRefreshHandler, type AuthTokens, type User } from "./api";
 
 const TOKENS_KEY = "msme.auth.tokens";
 const USER_KEY = "msme.auth.user";
@@ -41,7 +43,8 @@ export function getStoredUser(): User | null {
 
 export function setSession(tokens: AuthTokens, user: User) {
   if (!isBrowser()) return;
-  window.localStorage.setItem(TOKENS_KEY, JSON.stringify(tokens));
+  // Never persist a refresh token here, even if an API response carried one.
+  window.localStorage.setItem(TOKENS_KEY, JSON.stringify({ access: tokens.access }));
   window.localStorage.setItem(USER_KEY, JSON.stringify(user));
   window.dispatchEvent(new Event("msme-auth-change"));
 }
@@ -52,6 +55,39 @@ export function clearSession() {
   window.localStorage.removeItem(USER_KEY);
   window.dispatchEvent(new Event("msme-auth-change"));
 }
+
+/** Revoke the server-side session (refresh cookie) and forget the local one. */
+export async function logout() {
+  try {
+    await logoutSession();
+  } catch {
+    // Offline or already logged out: still clear locally.
+  }
+  clearSession();
+}
+
+let refreshing: Promise<string | null> | null = null;
+
+/** One refresh at a time: parallel 401s share it (refresh tokens rotate). */
+export function refreshSession(): Promise<string | null> {
+  refreshing ??= (async () => {
+    try {
+      const { access } = await refreshAccessToken();
+      if (isBrowser()) {
+        window.localStorage.setItem(TOKENS_KEY, JSON.stringify({ access }));
+      }
+      return access;
+    } catch {
+      clearSession();
+      return null;
+    } finally {
+      refreshing = null;
+    }
+  })();
+  return refreshing;
+}
+
+if (isBrowser()) setRefreshHandler(refreshSession);
 
 /** Where to send a signed-in user after login, based on role. */
 export function dashboardPathForRole(role: User["role"]) {

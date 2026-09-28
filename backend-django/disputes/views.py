@@ -18,6 +18,8 @@ class DisputeViewSet(viewsets.ModelViewSet):
     filterset_fields = ["status", "type", "order"]
 
     def get_queryset(self):
+        if getattr(self, "swagger_fake_view", False):  # OpenAPI schema generation
+            return Dispute.objects.none()
         user = self.request.user
         qs = Dispute.objects.select_related("order", "raised_by", "against").all()
         if user.is_superuser or user.role == "ADMIN":

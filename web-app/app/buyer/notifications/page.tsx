@@ -20,6 +20,7 @@ import {
   type NotificationType,
 } from "@/lib/api";
 import { getStoredTokens } from "@/lib/auth";
+import { useI18n } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -32,6 +33,7 @@ const TYPE_ICON: Record<NotificationType, typeof IconBell> = {
 };
 
 export default function NotificationsPage() {
+  const { t, intlLocale } = useI18n();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -40,7 +42,7 @@ export default function NotificationsPage() {
     const token = getStoredTokens()?.access;
     if (!token) {
       if (!isCancelled()) {
-        setError("You must be signed in to view notifications.");
+        setError(t("notifications.signIn"));
         setLoading(false);
       }
       return;
@@ -54,12 +56,12 @@ export default function NotificationsPage() {
       if (!isCancelled()) setNotifications(res.results);
     } catch (err) {
       if (!isCancelled()) {
-        setError(err instanceof ApiError ? err.message : "Failed to load notifications.");
+        setError(err instanceof ApiError ? err.message : t("notifications.loadFailed"));
       }
     } finally {
       if (!isCancelled()) setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     let cancelled = false;
@@ -78,7 +80,7 @@ export default function NotificationsPage() {
     try {
       await markNotificationRead(id, token);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Failed to mark as read.");
+      toast.error(err instanceof ApiError ? err.message : t("notifications.markFailed"));
     }
   }
 
@@ -91,7 +93,7 @@ export default function NotificationsPage() {
       await markAllNotificationsRead(token);
     } catch (err) {
       setNotifications(previous);
-      toast.error(err instanceof ApiError ? err.message : "Failed to mark all as read.");
+      toast.error(err instanceof ApiError ? err.message : t("notifications.markAllFailed"));
     }
   }
 
@@ -109,12 +111,12 @@ export default function NotificationsPage() {
     <div className="mx-auto flex max-w-2xl flex-col gap-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-semibold text-heading">Notifications</h1>
-          <p className="mt-1 text-sm text-body">Updates on your requirements, orders, and account.</p>
+          <h1 className="text-lg font-semibold text-heading">{t("notifications.title")}</h1>
+          <p className="mt-1 text-sm text-body">{t("notifications.subtitle")}</p>
         </div>
         {unreadCount > 0 && (
           <Button variant="outline" size="sm" onClick={markAllRead}>
-            Mark all read
+            {t("notifications.markAll")}
           </Button>
         )}
       </div>
@@ -129,7 +131,7 @@ export default function NotificationsPage() {
 
       {!loading && notifications.length === 0 && (
         <p className="rounded-2xl border border-dashed border-border-muted p-12 text-center text-sm text-body">
-          No notifications yet.
+          {t("notifications.empty")}
         </p>
       )}
 
@@ -157,7 +159,7 @@ export default function NotificationsPage() {
                     </div>
                     <p className="mt-0.5 text-sm text-body">{n.message}</p>
                     <p className="mt-1.5 text-xs text-muted-2">
-                      {new Date(n.created_at).toLocaleString("en-IN", {
+                      {new Date(n.created_at).toLocaleString(intlLocale, {
                         day: "2-digit",
                         month: "short",
                         hour: "2-digit",

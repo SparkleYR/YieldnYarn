@@ -69,8 +69,10 @@ INSTALLED_APPS = [
     # Third-party
     "rest_framework",
     "rest_framework_simplejwt",
+    "rest_framework_simplejwt.token_blacklist",
     "corsheaders",
     "django_filters",
+    "drf_spectacular",
     # Local apps
     "accounts",
     "config",
@@ -84,6 +86,8 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    # Serves collected static files (admin, API docs) from the app container.
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -124,6 +128,9 @@ DATABASES = {
         "PASSWORD": env("DB_PASSWORD", "devpassword"),
         "HOST": env("DB_HOST", "localhost"),
         "PORT": env("DB_PORT", "5432"),
+        # Azure Database for PostgreSQL requires TLS: DB_SSLMODE=require.
+        "OPTIONS": {"sslmode": env("DB_SSLMODE", "prefer")},
+        "CONN_MAX_AGE": env_int("DB_CONN_MAX_AGE", 60),
     }
 }
 
@@ -169,19 +176,35 @@ USE_TZ = True
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
-# Media files — local FileSystemStorage for now.
-# Structured so it's easy to swap to Azure Blob Storage (via django-storages)
-# later: just set DEFAULT_FILE_STORAGE / STORAGES["default"] to the Azure
-# backend and provide the AZURE_* credentials, no model/view changes needed.
+# Media (grading evidence photos): local disk in development, Azure Blob
+# Storage in production (django-storages) when AZURE_ACCOUNT_NAME is set —
+# no model/view changes either way. Blob URLs are signed and expire, so the
+# container can stay private.
 MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / env("MEDIA_ROOT", "./media")  # type: ignore[operator]
 
+AZURE_ACCOUNT_NAME = env("AZURE_ACCOUNT_NAME", "")
+if AZURE_ACCOUNT_NAME:
+    _media_storage = {
+        "BACKEND": "storages.backends.azure_storage.AzureStorage",
+        "OPTIONS": {
+            "account_name": AZURE_ACCOUNT_NAME,
+            "account_key": env("AZURE_ACCOUNT_KEY", ""),
+            "azure_container": env("AZURE_CONTAINER", "media"),
+            "expiration_secs": env_int("AZURE_URL_EXPIRATION_SECS", 3600),
+        },
+    }
+else:
+    _media_storage = {"BACKEND": "django.core.files.storage.FileSystemStorage"}
+
 STORAGES = {
-    "default": {
-        "BACKEND": "django.core.files.storage.FileSystemStorage",
-    },
+    "default": _media_storage,
     "staticfiles": {
-        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+        "BACKEND": (
+            "django.contrib.staticfiles.storage.StaticFilesStorage"
+            if DEBUG
+            else "whitenoise.storage.CompressedManifestStaticFilesStorage"
+        ),
     },
 }
 
@@ -203,6 +226,7 @@ REST_FRAMEWORK = {
         "rest_framework.filters.OrderingFilter",
     ),
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "PAGE_SIZE": 20,
 }
 
@@ -214,13 +238,35 @@ SIMPLE_JWT = {
         days=env_int("JWT_REFRESH_TOKEN_LIFETIME_DAYS", 7)
     ),
     "ROTATE_REFRESH_TOKENS": True,
+    # A rotated-out (or logged-out) refresh token can't be replayed.
+    "BLACKLIST_AFTER_ROTATION": True,
     "USER_ID_FIELD": "id",
     "USER_ID_CLAIM": "user_id",
 }
 
+# The web app keeps its refresh token in this httpOnly cookie (JS can't read
+# it, so an XSS bug can't steal a long-lived session). Scoped to the auth
+# endpoints; SameSite=Lax keeps it off cross-site POSTs. The Android app
+# doesn't use it — it gets the refresh token in the response body.
+REFRESH_COOKIE_NAME = "msme_refresh"
+REFRESH_COOKIE_PATH = "/api/auth/"
+REFRESH_COOKIE_SECURE = env_bool("REFRESH_COOKIE_SECURE", not DEBUG)
+REFRESH_COOKIE_SAMESITE = env("REFRESH_COOKIE_SAMESITE", "Lax")
+
 # CORS
+# Credentials are needed for the refresh cookie on login/refresh/logout.
+CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = env_list(
     "CORS_ALLOWED_ORIGINS", "http://localhost:3000"
+)
+CORS_ALLOW_HEADERS = (
+    "accept",
+    "authorization",
+    "content-type",
+    "user-agent",
+    "x-csrftoken",
+    "x-requested-with",
+    "x-auth-mode",
 )
 
 # Base URL of the FastAPI compute service (grading/pricing/matching).
@@ -241,3 +287,26 @@ DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", "no-reply@msmemarketplace.local")
 # (notifications/fcm.py). Empty = push disabled; in-app notifications still
 # work. Never commit this file.
 FIREBASE_CREDENTIALS_FILE = env("FIREBASE_CREDENTIALS_FILE", "")
+
+# OpenAPI schema (drf-spectacular): served at /api/schema/ (+ /api/docs/),
+# committed as docs/api/openapi-django.yaml and checked for drift in CI.
+SPECTACULAR_SETTINGS = {
+    "TITLE": "MSME Marketplace API",
+    "DESCRIPTION": "Django REST API: auth, catalog, orders/bids, disputes, notifications, pricing.",
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+    "COMPONENT_SPLIT_REQUEST": True,
+}
+
+# Behind Azure Container Apps' HTTPS ingress: trust its X-Forwarded-Proto so
+# request.is_secure() (and secure cookies/redirects) work.
+if not DEBUG:
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    CSRF_TRUSTED_ORIGINS = env_list("CSRF_TRUSTED_ORIGINS", "")
+
+# Error tracking (implementation_plan.md §11): on when SENTRY_DSN is set.
+SENTRY_DSN = env("SENTRY_DSN", "")
+if SENTRY_DSN:
+    import sentry_sdk
+
+    sentry_sdk.init(dsn=SENTRY_DSN, traces_sample_rate=0.1, send_default_pii=False)

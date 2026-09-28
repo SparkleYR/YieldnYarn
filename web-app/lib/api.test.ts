@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ApiError, DJANGO_API_URL, FASTAPI_URL, djangoApi, fastApi } from "./api";
+import { ApiError, DJANGO_API_URL, FASTAPI_URL, djangoApi, fastApi, readableError, setRefreshHandler } from "./api";
 
 function mockFetchOnce(response: Partial<Response> & { json?: () => Promise<unknown> }) {
   const fetchMock = vi.fn().mockResolvedValue({
@@ -102,5 +102,68 @@ describe("djangoApi/fastApi request wrapper", () => {
 
     expect(result).toBeUndefined();
     expect(jsonSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe("DRF error messages", () => {
+  it("uses detail, flattens field errors, passes plain text through", () => {
+    expect(readableError('{"detail": "Not found."}')).toBe("Not found.");
+    expect(readableError('{"offered_price": ["A valid number is required."]}')).toBe(
+      "offered price: A valid number is required."
+    );
+    expect(readableError('{"non_field_errors": ["You cannot bid on your own listing."]}')).toBe(
+      "You cannot bid on your own listing."
+    );
+    expect(readableError("Bad Gateway")).toBe("Bad Gateway");
+  });
+});
+
+describe("access token refresh", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    setRefreshHandler(null);
+  });
+
+  function sequence(...responses: Partial<Response>[]) {
+    const fetchMock = vi.fn();
+    for (const r of responses) {
+      fetchMock.mockResolvedValueOnce({ ok: true, status: 200, text: async () => "", json: async () => ({}), ...r });
+    }
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  }
+
+  it("refreshes once on a 401 and replays the request with the new token", async () => {
+    const fetchMock = sequence(
+      { ok: false, status: 401, text: async () => '{"detail": "Token is invalid or expired"}' },
+      { json: async () => ({ id: 7 }) }
+    );
+    const handler = vi.fn().mockResolvedValue("fresh-token");
+    setRefreshHandler(handler);
+
+    const result = await djangoApi.get("/catalog/listings/7/", { token: "stale-token" });
+
+    expect(result).toEqual({ id: 7 });
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[1][1].headers.Authorization).toBe("Bearer fresh-token");
+  });
+
+  it("gives up with the 401 when the session can't be refreshed", async () => {
+    sequence({ ok: false, status: 401, text: async () => '{"detail": "Token is invalid or expired"}' });
+    setRefreshHandler(vi.fn().mockResolvedValue(null));
+
+    await expect(djangoApi.get("/catalog/listings/", { token: "stale" })).rejects.toMatchObject({
+      status: 401,
+      message: "Token is invalid or expired",
+    });
+  });
+
+  it("doesn't try to refresh anonymous requests", async () => {
+    sequence({ ok: false, status: 401, text: async () => "" });
+    const handler = vi.fn();
+    setRefreshHandler(handler);
+
+    await expect(djangoApi.get("/catalog/listings/")).rejects.toBeInstanceOf(ApiError);
+    expect(handler).not.toHaveBeenCalled();
   });
 });

@@ -12,6 +12,7 @@ import {
   type Vertical,
 } from "@/lib/api";
 import { getStoredTokens } from "@/lib/auth";
+import { useI18n } from "@/lib/i18n";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { PostRequirementDialog } from "@/components/buyer/post-requirement-dialog";
 import { Button } from "@/components/ui/button";
@@ -27,6 +28,7 @@ import {
 
 export default function RequirementsPage() {
   const [verticals, setVerticals] = useState<Vertical[]>([]);
+  const { t, intlLocale } = useI18n();
   const [requirements, setRequirements] = useState<Requirement[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -36,7 +38,7 @@ export default function RequirementsPage() {
     const token = getStoredTokens()?.access;
     if (!token) {
       if (!isCancelled()) {
-        setError("You must be signed in as a buyer to view requirements.");
+        setError(t("requirements.signIn"));
         setLoading(false);
       }
       return;
@@ -56,12 +58,12 @@ export default function RequirementsPage() {
       }
     } catch (err) {
       if (!isCancelled()) {
-        setError(err instanceof ApiError ? err.message : "Failed to load requirements.");
+        setError(err instanceof ApiError ? err.message : t("requirements.loadFailed"));
       }
     } finally {
       if (!isCancelled()) setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     let cancelled = false;
@@ -89,15 +91,15 @@ export default function RequirementsPage() {
         }
         toast.success(
           result.fully_fulfilled
-            ? `Matched — order #${result.order_id} created.`
-            : `Partially matched — order #${result.order_id} created (${result.shortfall} still short).`
+            ? t("requirements.matched", { id: result.order_id ?? "" })
+            : t("requirements.partial", { id: result.order_id ?? "", shortfall: result.shortfall ?? "" })
         );
       } else if (!silent) {
-        toast.info(result.detail ?? "No matching listings available yet.");
+        toast.info(t("requirements.noMatch"));
       }
     } catch (err) {
       if (!silent) {
-        toast.error(err instanceof ApiError ? err.message : "Failed to check for matches.");
+        toast.error(err instanceof ApiError ? err.message : t("requirements.matchFailed"));
       }
     } finally {
       setMatchingId(null);
@@ -116,9 +118,9 @@ export default function RequirementsPage() {
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-semibold text-heading">My requirements</h1>
+          <h1 className="text-lg font-semibold text-heading">{t("requirements.title")}</h1>
           <p className="mt-1 text-sm text-body">
-            Post what you need — the matching engine finds sellers for you.
+            {t("requirements.subtitle")}
           </p>
         </div>
         <PostRequirementDialog
@@ -137,13 +139,13 @@ export default function RequirementsPage() {
         <Table>
           <TableHeader>
             <TableRow className="border-border-muted hover:bg-transparent">
-              <TableHead className="pl-5">Commodity</TableHead>
-              <TableHead>Quantity</TableHead>
-              <TableHead>Min grade</TableHead>
-              <TableHead>Max price</TableHead>
-              <TableHead>Region</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Posted</TableHead>
+              <TableHead className="pl-5">{t("common.commodity")}</TableHead>
+              <TableHead>{t("common.quantity")}</TableHead>
+              <TableHead>{t("requirements.minGrade")}</TableHead>
+              <TableHead>{t("requirements.maxPrice")}</TableHead>
+              <TableHead>{t("common.region")}</TableHead>
+              <TableHead>{t("common.status")}</TableHead>
+              <TableHead>{t("requirements.posted")}</TableHead>
               <TableHead className="pr-5" />
             </TableRow>
           </TableHeader>
@@ -165,14 +167,14 @@ export default function RequirementsPage() {
                   </TableCell>
                   <TableCell className="text-body">{req.min_grade || "—"}</TableCell>
                   <TableCell className="text-body">
-                    {req.max_price ? `₹${Number(req.max_price).toLocaleString("en-IN")}` : "—"}
+                    {req.max_price ? `₹${Number(req.max_price).toLocaleString(intlLocale)}` : "—"}
                   </TableCell>
                   <TableCell className="text-body">{req.region || "—"}</TableCell>
                   <TableCell>
                     <StatusBadge status={req.status} />
                   </TableCell>
                   <TableCell className="text-muted-2">
-                    {new Date(req.created_at).toLocaleDateString("en-IN", {
+                    {new Date(req.created_at).toLocaleDateString(intlLocale, {
                       day: "2-digit",
                       month: "short",
                     })}
@@ -185,7 +187,7 @@ export default function RequirementsPage() {
                         disabled={matchingId === req.id}
                         onClick={() => checkForMatches(req.id)}
                       >
-                        {matchingId === req.id ? "Checking…" : "Check matches"}
+                        {matchingId === req.id ? t("requirements.checking") : t("requirements.checkMatches")}
                       </Button>
                     )}
                   </TableCell>
@@ -194,7 +196,7 @@ export default function RequirementsPage() {
             {!loading && requirements.length === 0 && (
               <TableRow className="border-border-muted hover:bg-transparent">
                 <TableCell colSpan={8} className="py-8 text-center text-sm text-muted-2">
-                  No requirements posted yet.
+                  {t("requirements.empty")}
                 </TableCell>
               </TableRow>
             )}

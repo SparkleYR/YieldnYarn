@@ -28,7 +28,42 @@ type RequestOptions = Omit<RequestInit, "body"> & {
   token?: string;
 };
 
-async function request<T>(baseUrl: string, path: string, options: RequestOptions = {}): Promise<T> {
+/**
+ * Turns a DRF error body into one readable line: `{"detail": "..."}` ->
+ * the detail; `{"field": ["msg"]}` -> "field: msg"; anything that isn't
+ * JSON is passed through as-is.
+ */
+export function readableError(text: string): string {
+  try {
+    const data: unknown = JSON.parse(text);
+    if (typeof data === "string") return data;
+    if (Array.isArray(data)) return data.map(String).join(" ");
+    if (data && typeof data === "object") {
+      const record = data as Record<string, unknown>;
+      if (typeof record.detail === "string") return record.detail;
+      return Object.entries(record)
+        .map(([field, value]) => {
+          const message = Array.isArray(value) ? value.map(String).join(" ") : String(value);
+          return field === "non_field_errors" ? message : `${field.replace(/_/g, " ")}: ${message}`;
+        })
+        .join("\n");
+    }
+  } catch {
+    // not JSON
+  }
+  return text;
+}
+
+// Set by lib/auth.ts: gets a fresh access token (via the httpOnly refresh
+// cookie) or returns null when the session is over. Kept as a hook so this
+// module doesn't import the session code.
+let refreshHandler: (() => Promise<string | null>) | null = null;
+
+export function setRefreshHandler(handler: (() => Promise<string | null>) | null) {
+  refreshHandler = handler;
+}
+
+async function request<T>(baseUrl: string, path: string, options: RequestOptions = {}, retried = false): Promise<T> {
   const { body, token, headers, ...rest } = options;
 
   const res = await fetch(`${baseUrl}${path}`, {
@@ -41,9 +76,15 @@ async function request<T>(baseUrl: string, path: string, options: RequestOptions
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
 
+  // An expired access token: refresh once and replay the request.
+  if (res.status === 401 && token && !retried && refreshHandler) {
+    const fresh = await refreshHandler();
+    if (fresh) return request<T>(baseUrl, path, { ...options, token: fresh }, true);
+  }
+
   if (!res.ok) {
     const message = await res.text().catch(() => res.statusText);
-    throw new ApiError(message || `Request failed with status ${res.status}`, res.status);
+    throw new ApiError(readableError(message) || `Request failed with status ${res.status}`, res.status);
   }
 
   if (res.status === 204) {
@@ -97,7 +138,8 @@ export interface User {
 
 export interface AuthTokens {
   access: string;
-  refresh: string;
+  /** Only for API clients in body mode; the web app's lives in an httpOnly cookie. */
+  refresh?: string;
 }
 
 export interface LoginCredentials {
@@ -113,9 +155,13 @@ export interface RegisterPayload {
   display_name?: string;
 }
 
-/** POST /api/auth/login/ — returns a JWT access + refresh pair. */
+// Asks Django to put the refresh token in an httpOnly cookie instead of the
+// response body (backend-django/accounts/views.py).
+const COOKIE_AUTH = { credentials: "include" as const, headers: { "X-Auth-Mode": "cookie" } };
+
+/** POST /api/auth/login/ — returns the access token; the refresh token is set as an httpOnly cookie. */
 export function login(credentials: LoginCredentials) {
-  return djangoApi.post<AuthTokens>("/auth/login/", credentials);
+  return djangoApi.post<AuthTokens>("/auth/login/", credentials, COOKIE_AUTH);
 }
 
 /** POST /api/auth/register/ — creates the user; caller should call login() next. */
@@ -123,9 +169,14 @@ export function register(payload: RegisterPayload) {
   return djangoApi.post<Pick<User, "email" | "phone" | "role">>("/auth/register/", payload);
 }
 
-/** POST /api/auth/refresh/ — exchanges a refresh token for a new access token. */
-export function refreshAccessToken(refresh: string) {
-  return djangoApi.post<{ access: string }>("/auth/refresh/", { refresh });
+/** POST /api/auth/refresh/ — new access token from the refresh cookie (which rotates). */
+export function refreshAccessToken() {
+  return djangoApi.post<{ access: string }>("/auth/refresh/", {}, COOKIE_AUTH);
+}
+
+/** POST /api/auth/logout/ — revokes the refresh token and clears its cookie. */
+export function logoutSession() {
+  return djangoApi.post<void>("/auth/logout/", {}, COOKIE_AUTH);
 }
 
 /** GET /api/auth/me/ — requires a bearer token. */
@@ -395,6 +446,8 @@ export interface Listing {
   price_final: string | null;
   location_lat: number | null;
   location_lng: number | null;
+  /** State name; empty when the seller didn't set one. */
+  region: string;
   status: ListingStatus;
   grade: string | null;
   grade_confidence: number | null;
@@ -410,6 +463,35 @@ export function listListings(token?: string) {
 /** GET /api/catalog/listings/{id}/ */
 export function getListing(id: number, token?: string) {
   return djangoApi.get<Listing>(`/catalog/listings/${id}/`, token ? { token } : undefined);
+}
+
+export interface Evidence {
+  id: number;
+  listing: number;
+  /** Absolute URL to the uploaded photo. */
+  file: string;
+  file_type: "IMAGE" | "VIDEO" | "DOCUMENT";
+  uploaded_at: string;
+}
+
+/** GET /api/catalog/listings/{id}/evidence/ — the seller's grading photos. */
+export function listEvidence(listingId: number, token?: string) {
+  return djangoApi.get<Evidence[]>(`/catalog/listings/${listingId}/evidence/`, token ? { token } : undefined);
+}
+
+export interface GradingResult {
+  id: number;
+  listing: number;
+  source: "AI" | "VERIFIER";
+  confidence_score: number | null;
+  attribute_scores: Record<string, number>;
+  created_at: string;
+  notes: string;
+}
+
+/** GET /api/catalog/listings/{id}/grading/ — newest first. */
+export function listGradingResults(listingId: number, token?: string) {
+  return djangoApi.get<GradingResult[]>(`/catalog/listings/${listingId}/grading/`, token ? { token } : undefined);
 }
 
 // --- Orders (backend-django/orders) ------------------------------------------

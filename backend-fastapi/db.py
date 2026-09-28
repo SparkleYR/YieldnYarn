@@ -80,6 +80,12 @@ class Settings(BaseSettings):
     # <dir>/<vertical_slug>/<attribute>.pt (see ml-training/README.md).
     # Empty = ml-training/checkpoints in this repo.
     GRADING_MODELS_DIR: str = ""
+    # Where to download evidence from when it isn't on a shared disk (Azure
+    # Blob Storage container URL, plus an optional SAS query string).
+    EVIDENCE_BASE_URL: str = ""
+    EVIDENCE_URL_QUERY: str = ""
+    # Error tracking (implementation_plan.md §11); on when set.
+    SENTRY_DSN: str = ""
 
 
 settings = Settings()

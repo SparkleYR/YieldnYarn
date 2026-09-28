@@ -8,6 +8,7 @@ import { toast } from "sonner";
 
 import { ApiError, createBid, type Listing } from "@/lib/api";
 import { getStoredTokens } from "@/lib/auth";
+import { useT } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -29,6 +30,7 @@ type FormInput = z.input<typeof schema>;
 type FormValues = z.output<typeof schema>;
 
 export function ListingActions({ listing, price }: { listing: Listing; price: number }) {
+  const t = useT();
   const [bidOpen, setBidOpen] = useState(false);
   const [buying, setBuying] = useState(false);
 
@@ -45,7 +47,7 @@ export function ListingActions({ listing, price }: { listing: Listing; price: nu
   async function buyNow() {
     const token = getStoredTokens()?.access;
     if (!token) {
-      toast.error("You must be signed in as a buyer to place an order.");
+      toast.error(t("listing.signInToBuy"));
       return;
     }
     setBuying(true);
@@ -58,9 +60,9 @@ export function ListingActions({ listing, price }: { listing: Listing; price: nu
         },
         token
       );
-      toast.success("Offer sent to the seller at the listed price.");
+      toast.success(t("listing.offerSent"));
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Failed to submit the offer.");
+      toast.error(err instanceof ApiError ? err.message : t("listing.offerFailed"));
     } finally {
       setBuying(false);
     }
@@ -69,7 +71,7 @@ export function ListingActions({ listing, price }: { listing: Listing; price: nu
   async function onSubmitBid(values: FormValues) {
     const token = getStoredTokens()?.access;
     if (!token) {
-      toast.error("You must be signed in as a buyer to place a bid.");
+      toast.error(t("listing.signInToBid"));
       return;
     }
     try {
@@ -81,42 +83,41 @@ export function ListingActions({ listing, price }: { listing: Listing; price: nu
         },
         token
       );
-      toast.success("Bid submitted.");
+      toast.success(t("listing.bidSent"));
       reset();
       setBidOpen(false);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Failed to submit the bid.");
+      toast.error(err instanceof ApiError ? err.message : t("listing.bidFailed"));
     }
   }
 
   return (
     <div className="flex flex-col gap-2">
       <Button className="w-full" onClick={buyNow} disabled={buying}>
-        {buying ? "Sending…" : "Buy Now"}
+        {buying ? t("listing.sending") : t("listing.buyNow")}
       </Button>
       <Button variant="outline" className="w-full" onClick={() => setBidOpen(true)}>
-        Place a Bid
+        {t("listing.placeBid")}
       </Button>
 
       <Dialog open={bidOpen} onOpenChange={setBidOpen}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>Place a bid</DialogTitle>
+            <DialogTitle>{t("listing.bidDialogTitle")}</DialogTitle>
             <DialogDescription>
-              Offer a different price or quantity than the listing. The seller can accept,
-              reject, or counter.
+              {t("listing.bidDialogBody")}
             </DialogDescription>
           </DialogHeader>
 
           <form id="bid-form" onSubmit={handleSubmit(onSubmitBid)}>
             <FieldGroup>
               <Field data-invalid={!!errors.offered_price}>
-                <FieldLabel htmlFor="offered_price">Offered price (₹ / {listing.unit})</FieldLabel>
+                <FieldLabel htmlFor="offered_price">{t("listing.offeredPrice", { unit: listing.unit })}</FieldLabel>
                 <Input id="offered_price" type="number" step="any" {...register("offered_price")} />
                 <FieldError errors={errors.offered_price ? [errors.offered_price] : undefined} />
               </Field>
               <Field data-invalid={!!errors.offered_quantity}>
-                <FieldLabel htmlFor="offered_quantity">Quantity ({listing.unit})</FieldLabel>
+                <FieldLabel htmlFor="offered_quantity">{t("listing.offeredQuantity", { unit: listing.unit })}</FieldLabel>
                 <Input id="offered_quantity" type="number" step="any" {...register("offered_quantity")} />
                 <FieldError errors={errors.offered_quantity ? [errors.offered_quantity] : undefined} />
               </Field>
@@ -125,7 +126,7 @@ export function ListingActions({ listing, price }: { listing: Listing; price: nu
 
           <DialogFooter>
             <Button type="submit" form="bid-form" disabled={isSubmitting}>
-              {isSubmitting ? "Submitting…" : "Submit bid"}
+              {isSubmitting ? t("listing.submitting") : t("listing.submitBid")}
             </Button>
           </DialogFooter>
         </DialogContent>

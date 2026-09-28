@@ -2,6 +2,7 @@ import Link from "next/link";
 import { IconLeaf } from "@tabler/icons-react";
 
 import { SITE_NAME } from "@/lib/constants";
+import { LanguageSwitcher } from "@/components/shared/language-switcher";
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -15,6 +16,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         </span>
       </Link>
       <div className="w-full max-w-sm">{children}</div>
+      <LanguageSwitcher className="mt-6" />
     </div>
   );
 }

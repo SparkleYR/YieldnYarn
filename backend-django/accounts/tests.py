@@ -275,3 +275,71 @@ class MeUpdateTest(APITestCase):
         self.user.refresh_from_db()
         self.assertEqual(self.user.role, "SELLER")
         self.assertEqual(self.user.email, "me@example.com")
+
+
+class RefreshCookieTest(APITestCase):
+    """httpOnly refresh cookie for the web app; body tokens for the Android app."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(email="cookie@example.com", password="pw12345678", role="BUYER")
+        self.credentials = {"email": "cookie@example.com", "password": "pw12345678"}
+
+    def _login(self, cookie_mode=True):
+        headers = {"HTTP_X_AUTH_MODE": "cookie"} if cookie_mode else {}
+        return self.client.post("/api/auth/login/", self.credentials, format="json", **headers)
+
+    def test_cookie_mode_login_sets_an_httponly_cookie_and_hides_the_refresh_token(self):
+        response = self._login()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("access", response.data)
+        self.assertNotIn("refresh", response.data)
+        cookie = response.cookies["msme_refresh"]
+        self.assertTrue(cookie["httponly"])
+        self.assertEqual(cookie["path"], "/api/auth/")
+        self.assertEqual(cookie["samesite"], "Lax")
+
+    def test_body_mode_login_is_unchanged_for_the_app(self):
+        response = self._login(cookie_mode=False)
+
+        self.assertIn("refresh", response.data)
+        self.assertNotIn("msme_refresh", response.cookies)
+
+    def test_refresh_from_the_cookie_rotates_it(self):
+        old = self._login().cookies["msme_refresh"].value
+
+        response = self.client.post("/api/auth/refresh/", {}, format="json", HTTP_X_AUTH_MODE="cookie")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("access", response.data)
+        self.assertNotIn("refresh", response.data)
+        self.assertNotEqual(response.cookies["msme_refresh"].value, old)
+
+    def test_a_rotated_out_refresh_token_cannot_be_replayed(self):
+        old = self._login(cookie_mode=False).data["refresh"]
+        self.client.post("/api/auth/refresh/", {"refresh": old}, format="json")
+
+        replay = self.client.post("/api/auth/refresh/", {"refresh": old}, format="json")
+
+        self.assertEqual(replay.status_code, 401)
+
+    def test_refresh_without_any_token_is_401(self):
+        response = self.client.post("/api/auth/refresh/", {}, format="json", HTTP_X_AUTH_MODE="cookie")
+        self.assertEqual(response.status_code, 401)
+
+    def test_logout_revokes_the_refresh_token_and_clears_the_cookie(self):
+        self._login()
+
+        response = self.client.post("/api/auth/logout/", {}, format="json")
+
+        self.assertEqual(response.status_code, 204)
+        self.assertEqual(response.cookies["msme_refresh"].value, "")
+        refresh = self.client.post("/api/auth/refresh/", {}, format="json", HTTP_X_AUTH_MODE="cookie")
+        self.assertEqual(refresh.status_code, 401)
+
+    def test_app_logout_with_a_body_token_revokes_it(self):
+        refresh = self._login(cookie_mode=False).data["refresh"]
+
+        self.client.post("/api/auth/logout/", {"refresh": refresh}, format="json")
+
+        self.assertEqual(self.client.post("/api/auth/refresh/", {"refresh": refresh}, format="json").status_code, 401)

@@ -1,0 +1,720 @@
+{
+  "components": {
+    "schemas": {
+      "AllocateRequest": {
+        "properties": {
+          "requirement_id": {
+            "title": "Requirement Id",
+            "type": "integer"
+          },
+          "strategy": {
+            "default": "greedy",
+            "title": "Strategy",
+            "type": "string"
+          }
+        },
+        "required": [
+          "requirement_id"
+        ],
+        "title": "AllocateRequest",
+        "type": "object"
+      },
+      "FindMatchesRequest": {
+        "properties": {
+          "requirement_id": {
+            "title": "Requirement Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "requirement_id"
+        ],
+        "title": "FindMatchesRequest",
+        "type": "object"
+      },
+      "GradeRequest": {
+        "properties": {
+          "listing_id": {
+            "title": "Listing Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "listing_id"
+        ],
+        "title": "GradeRequest",
+        "type": "object"
+      },
+      "GradeResponse": {
+        "properties": {
+          "attribute_scores": {
+            "additionalProperties": true,
+            "title": "Attribute Scores",
+            "type": "object"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "grade": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grade"
+          },
+          "grading_result_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grading Result Id"
+          },
+          "listing_id": {
+            "title": "Listing Id",
+            "type": "integer"
+          },
+          "method": {
+            "title": "Method",
+            "type": "string"
+          },
+          "needs_verification": {
+            "title": "Needs Verification",
+            "type": "boolean"
+          },
+          "overall_confidence": {
+            "title": "Overall Confidence",
+            "type": "number"
+          },
+          "persistence_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Persistence Error"
+          }
+        },
+        "required": [
+          "listing_id",
+          "attribute_scores",
+          "overall_confidence",
+          "needs_verification",
+          "method"
+        ],
+        "title": "GradeResponse",
+        "type": "object"
+      },
+      "GradingStatusResponse": {
+        "properties": {
+          "attribute_scores": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attribute Scores"
+          },
+          "confidence_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence Score"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "grade": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grade"
+          },
+          "listing_id": {
+            "title": "Listing Id",
+            "type": "integer"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "listing_id",
+          "status"
+        ],
+        "title": "GradingStatusResponse",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "description": "FastAPI service for grading, pricing, and matching compute workloads. See implementation_plan.md \u00a75.",
+    "title": "MSME Multi-Vertical Commodity Marketplace \u2014 Compute/ML Service",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/compute/grading/grade": {
+      "post": {
+        "operationId": "trigger_grading_compute_grading_grade_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GradeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GradeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Trigger Grading",
+        "tags": [
+          "grading"
+        ]
+      }
+    },
+    "/compute/grading/status/{listing_id}": {
+      "get": {
+        "operationId": "grading_status_compute_grading_status__listing_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "listing_id",
+            "required": true,
+            "schema": {
+              "title": "Listing Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GradingStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Grading Status",
+        "tags": [
+          "grading"
+        ]
+      }
+    },
+    "/compute/matching/allocate": {
+      "post": {
+        "operationId": "allocate_compute_matching_allocate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AllocateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Allocate",
+        "tags": [
+          "matching"
+        ]
+      }
+    },
+    "/compute/matching/find": {
+      "post": {
+        "operationId": "find_matches_compute_matching_find_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FindMatchesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Find Matches",
+        "tags": [
+          "matching"
+        ]
+      }
+    },
+    "/compute/pricing/adjusted": {
+      "get": {
+        "operationId": "adjusted_price_compute_pricing_adjusted_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "listing_id",
+            "required": true,
+            "schema": {
+              "title": "Listing Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Adjusted Price",
+        "tags": [
+          "pricing"
+        ]
+      }
+    },
+    "/compute/pricing/base": {
+      "get": {
+        "operationId": "base_price_compute_pricing_base_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "vertical",
+            "required": true,
+            "schema": {
+              "title": "Vertical",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "commodity",
+            "required": true,
+            "schema": {
+              "title": "Commodity",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "region",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Region"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Base Price",
+        "tags": [
+          "pricing"
+        ]
+      }
+    },
+    "/compute/pricing/estimate": {
+      "get": {
+        "operationId": "estimate_compute_pricing_estimate_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "vertical",
+            "required": true,
+            "schema": {
+              "title": "Vertical",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "commodity",
+            "required": true,
+            "schema": {
+              "title": "Commodity",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "quantity",
+            "required": true,
+            "schema": {
+              "exclusiveMinimum": 0,
+              "title": "Quantity",
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "min_grade",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Min Grade"
+            }
+          },
+          {
+            "in": "query",
+            "name": "region",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Region"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Estimate",
+        "tags": [
+          "pricing"
+        ]
+      }
+    },
+    "/compute/pricing/trends": {
+      "get": {
+        "operationId": "trends_compute_pricing_trends_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "vertical",
+            "required": true,
+            "schema": {
+              "title": "Vertical",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "commodity",
+            "required": true,
+            "schema": {
+              "title": "Commodity",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "region",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Region"
+            }
+          },
+          {
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 30,
+              "exclusiveMinimum": 0,
+              "maximum": 365,
+              "title": "Days",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Trends",
+        "tags": [
+          "pricing"
+        ]
+      }
+    },
+    "/health": {
+      "get": {
+        "description": "Basic liveness check \u2014 does not touch the database.",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Health Health Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health"
+      }
+    }
+  }
+}

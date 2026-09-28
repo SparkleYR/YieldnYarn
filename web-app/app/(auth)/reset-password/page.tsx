@@ -7,6 +7,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 
+import { useT } from "@/lib/i18n";
 import { ApiError, confirmPasswordReset } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,6 +38,7 @@ function ResetPasswordForm() {
   const searchParams = useSearchParams();
   const uid = searchParams.get("uid");
   const token = searchParams.get("token");
+  const t = useT();
 
   const [formError, setFormError] = useState<string | null>(null);
   const {
@@ -55,9 +57,9 @@ function ResetPasswordForm() {
       setFormError(
         err instanceof ApiError
           ? err.status === 400
-            ? "This reset link is invalid or has expired. Request a new one."
+            ? t("auth.reset.expired")
             : err.message
-          : "Something went wrong. Please try again."
+          : t("common.somethingWrong")
       );
     }
   }
@@ -65,15 +67,15 @@ function ResetPasswordForm() {
   if (!uid || !token) {
     return (
       <div className="rounded-2xl border border-border-muted bg-surface p-8 text-center">
-        <h1 className="text-xl font-semibold text-heading">Invalid reset link</h1>
+        <h1 className="text-xl font-semibold text-heading">{t("auth.reset.invalidTitle")}</h1>
         <p className="mt-2 text-sm text-body">
-          This password reset link is missing required information.
+          {t("auth.reset.invalidBody")}
         </p>
         <Link
           href="/forgot-password"
           className="mt-6 inline-block text-sm font-medium text-brand-primary-glow hover:underline"
         >
-          Request a new link
+          {t("auth.reset.requestNew")}
         </Link>
       </div>
     );
@@ -81,25 +83,25 @@ function ResetPasswordForm() {
 
   return (
     <div className="rounded-2xl border border-border-muted bg-surface p-8">
-      <h1 className="text-xl font-semibold text-heading">Reset password</h1>
-      <p className="mt-1 text-sm text-body">Choose a new password for your account.</p>
+      <h1 className="text-xl font-semibold text-heading">{t("auth.reset.title")}</h1>
+      <p className="mt-1 text-sm text-body">{t("auth.reset.subtitle")}</p>
 
       <form onSubmit={handleSubmit(onSubmit)} className="mt-6">
         <FieldGroup>
           <Field data-invalid={!!errors.password}>
-            <FieldLabel htmlFor="password">New password</FieldLabel>
+            <FieldLabel htmlFor="password">{t("auth.reset.newPassword")}</FieldLabel>
             <Input
               id="password"
               type="password"
               autoComplete="new-password"
-              placeholder="At least 8 characters"
+              placeholder={t("auth.register.passwordHint")}
               {...registerField("password")}
             />
             <FieldError errors={errors.password ? [errors.password] : undefined} />
           </Field>
 
           <Field data-invalid={!!errors.confirmPassword}>
-            <FieldLabel htmlFor="confirmPassword">Confirm new password</FieldLabel>
+            <FieldLabel htmlFor="confirmPassword">{t("auth.reset.confirm")}</FieldLabel>
             <Input
               id="confirmPassword"
               type="password"
@@ -116,7 +118,7 @@ function ResetPasswordForm() {
           )}
 
           <Button type="submit" disabled={isSubmitting} className="mt-2 w-full">
-            {isSubmitting ? "Resetting…" : "Reset password"}
+            {isSubmitting ? t("auth.reset.submitting") : t("auth.reset.submit")}
           </Button>
         </FieldGroup>
       </form>

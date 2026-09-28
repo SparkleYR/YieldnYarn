@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 import type { User } from "@/lib/api";
-import { clearSession, getStoredUser } from "@/lib/auth";
+import { getStoredUser, logout } from "@/lib/auth";
 
 /**
  * Reads the signed-in user from localStorage and stays in sync across tabs
@@ -26,5 +26,5 @@ export function useAuth() {
     };
   }, []);
 
-  return { user, logout: clearSession };
+  return { user, logout };
 }

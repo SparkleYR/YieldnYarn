@@ -7,6 +7,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 
+import { useT } from "@/lib/i18n";
 import { ApiError, getCurrentUser, login } from "@/lib/api";
 import { dashboardPathForRole, setSession } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -27,6 +28,7 @@ type LoginValues = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
   const router = useRouter();
+  const t = useT();
   const [formError, setFormError] = useState<string | null>(null);
   const {
     register: registerField,
@@ -45,27 +47,27 @@ export default function LoginPage() {
       setFormError(
         err instanceof ApiError
           ? err.status === 401
-            ? "Incorrect email or password."
+            ? t("auth.login.incorrect")
             : err.message
-          : "Something went wrong. Please try again."
+          : t("common.somethingWrong")
       );
     }
   }
 
   return (
     <div className="rounded-2xl border border-border-muted bg-surface p-8">
-      <h1 className="text-xl font-semibold text-heading">Log in</h1>
-      <p className="mt-1 text-sm text-body">Welcome back to {"MSME Marketplace"}.</p>
+      <h1 className="text-xl font-semibold text-heading">{t("auth.login.title")}</h1>
+      <p className="mt-1 text-sm text-body">{t("auth.login.welcome")}</p>
 
       <form onSubmit={handleSubmit(onSubmit)} className="mt-6">
         <FieldGroup>
           <Field data-invalid={!!errors.email}>
-            <FieldLabel htmlFor="email">Email</FieldLabel>
+            <FieldLabel htmlFor="email">{t("auth.email")}</FieldLabel>
             <Input
               id="email"
               type="email"
               autoComplete="email"
-              placeholder="you@business.com"
+              placeholder={t("auth.emailPlaceholder")}
               {...registerField("email")}
             />
             <FieldError errors={errors.email ? [errors.email] : undefined} />
@@ -73,12 +75,12 @@ export default function LoginPage() {
 
           <Field data-invalid={!!errors.password}>
             <div className="flex items-center justify-between">
-              <FieldLabel htmlFor="password">Password</FieldLabel>
+              <FieldLabel htmlFor="password">{t("auth.password")}</FieldLabel>
               <Link
                 href="/forgot-password"
                 className="text-xs font-medium text-brand-primary-glow hover:underline"
               >
-                Forgot password?
+                {t("auth.login.forgot")}
               </Link>
             </div>
             <Input
@@ -98,15 +100,15 @@ export default function LoginPage() {
           )}
 
           <Button type="submit" disabled={isSubmitting} className="mt-2 w-full">
-            {isSubmitting ? "Logging in…" : "Log in"}
+            {isSubmitting ? t("auth.login.submitting") : t("auth.login.submit")}
           </Button>
         </FieldGroup>
       </form>
 
       <p className="mt-6 text-center text-sm text-body">
-        Don&apos;t have an account?{" "}
+        {t("auth.login.noAccount")}{" "}
         <Link href="/register" className="font-medium text-brand-primary-glow hover:underline">
-          Sign up
+          {t("auth.login.signUp")}
         </Link>
       </p>
     </div>

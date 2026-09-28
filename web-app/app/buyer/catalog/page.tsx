@@ -14,6 +14,7 @@ import {
   type Vertical,
 } from "@/lib/api";
 import { getStoredTokens } from "@/lib/auth";
+import { useI18n } from "@/lib/i18n";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -44,6 +45,7 @@ function listingPrice(listing: Listing) {
 function CatalogBrowser() {
   const searchParams = useSearchParams();
   const initialVertical = searchParams.get("vertical") ?? "all";
+  const { t, intlLocale } = useI18n();
 
   const [verticals, setVerticals] = useState<Vertical[]>([]);
   const [listings, setListings] = useState<Listing[]>([]);
@@ -71,12 +73,12 @@ function CatalogBrowser() {
       }
     } catch (err) {
       if (!isCancelled()) {
-        setError(err instanceof ApiError ? err.message : "Failed to load the catalog.");
+        setError(err instanceof ApiError ? err.message : t("catalog.loadFailed"));
       }
     } finally {
       if (!isCancelled()) setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     let cancelled = false;
@@ -125,7 +127,7 @@ function CatalogBrowser() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <Input
-          placeholder="Search commodity or variety…"
+          placeholder={t("catalog.search")}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           className="h-9 sm:max-w-sm"
@@ -133,10 +135,10 @@ function CatalogBrowser() {
         <div className="flex items-center gap-2">
           <Select value={vertical} onValueChange={setVertical}>
             <SelectTrigger className="w-40">
-              <SelectValue placeholder="Vertical" />
+              <SelectValue placeholder={t("common.vertical")} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All verticals</SelectItem>
+              <SelectItem value="all">{t("catalog.allVerticals")}</SelectItem>
               {verticals.map((v) => (
                 <SelectItem key={v.id} value={v.slug}>
                   {v.name}
@@ -146,12 +148,12 @@ function CatalogBrowser() {
           </Select>
           <Select value={sort} onValueChange={(v) => setSort(v as SortOption)}>
             <SelectTrigger className="w-40">
-              <SelectValue placeholder="Sort" />
+              <SelectValue placeholder={t("catalog.sort")} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="price_asc">Price: low to high</SelectItem>
-              <SelectItem value="price_desc">Price: high to low</SelectItem>
-              <SelectItem value="grade">Grade</SelectItem>
+              <SelectItem value="price_asc">{t("catalog.sort.priceAsc")}</SelectItem>
+              <SelectItem value="price_desc">{t("catalog.sort.priceDesc")}</SelectItem>
+              <SelectItem value="grade">{t("catalog.sort.grade")}</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -165,7 +167,7 @@ function CatalogBrowser() {
         </div>
       ) : visible.length === 0 ? (
         <p className="rounded-2xl border border-dashed border-border-muted p-12 text-center text-sm text-body">
-          No listings match your filters.
+          {t("catalog.empty")}
         </p>
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -187,11 +189,19 @@ function CatalogBrowser() {
                         </span>
                       )}
                     </p>
-                    {listing.location_lat !== null && listing.location_lng !== null && (
+                    {listing.region ? (
                       <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-2">
                         <IconMapPin size={12} />
-                        {listing.location_lat.toFixed(2)}, {listing.location_lng.toFixed(2)}
+                        {listing.region}
                       </p>
+                    ) : (
+                      listing.location_lat !== null &&
+                      listing.location_lng !== null && (
+                        <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-2">
+                          <IconMapPin size={12} />
+                          {listing.location_lat.toFixed(2)}, {listing.location_lng.toFixed(2)}
+                        </p>
+                      )
                     )}
                   </div>
                   <StatusBadge status={listing.status} />
@@ -205,11 +215,11 @@ function CatalogBrowser() {
                         : "bg-brand-primary/15 text-brand-primary-glow"
                     )}
                   >
-                    {listing.grade ?? "Ungraded"}
+                    {listing.grade ?? t("catalog.ungraded")}
                   </Badge>
                   {listing.grade !== null && listing.grade_confidence !== null && (
                     <span className="text-xs text-muted-2">
-                      {Math.round(listing.grade_confidence * 100)}% confidence
+                      {t("catalog.confidence", { pct: Math.round(listing.grade_confidence * 100) })}
                     </span>
                   )}
                 </div>
@@ -217,11 +227,11 @@ function CatalogBrowser() {
                 <div className="mt-auto flex items-end justify-between pt-4">
                   <div>
                     <p className="text-lg font-semibold text-heading">
-                      ₹{price.toLocaleString("en-IN")}
+                      ₹{price.toLocaleString(intlLocale)}
                       <span className="text-xs font-normal text-muted-2"> /{listing.unit}</span>
                     </p>
                     <p className="text-xs text-muted-2">
-                      {listing.quantity} {listing.unit} available
+                      {t("catalog.available", { quantity: listing.quantity, unit: listing.unit })}
                     </p>
                   </div>
                   <p className="flex items-center gap-1 text-xs text-body">

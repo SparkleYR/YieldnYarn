@@ -31,6 +31,13 @@ seller-app/local.properties
 ml-training/**/*.pt
 ml-training/**/*.pth
 ml-training/**/checkpoints/
+# ...except the shipped graders (~6 MB each), so images and deploys are reproducible.
+!ml-training/checkpoints/
+ml-training/checkpoints/*
+!ml-training/checkpoints/*/
+ml-training/checkpoints/*/*
+!ml-training/checkpoints/*/grader.pt
+!ml-training/checkpoints/*/grader.json
 ml-training/**/runs/
 ml-training/data/
 ml-training/external/

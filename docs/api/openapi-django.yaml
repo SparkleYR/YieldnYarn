@@ -1,0 +1,3681 @@
+openapi: 3.0.3
+info:
+  title: MSME Marketplace API
+  version: 1.0.0
+  description: 'Django REST API: auth, catalog, orders/bids, disputes, notifications,
+    pricing.'
+paths:
+  /api/auth/admin/stats/:
+    get:
+      operationId: auth_admin_stats_retrieve
+      description: |-
+        GET /api/auth/admin/stats/  (Admin only)
+
+        Platform-wide counters for the admin dashboard. `revenue_delta_pct` is a
+        real month-over-month comparison of REVENUE_STATUSES orders' total_price,
+        not a placeholder — it's `None` (not 0) when last month had zero revenue
+        to compare against, since a percentage change is undefined there.
+      tags:
+      - auth
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformStats'
+          description: ''
+  /api/auth/login/:
+    post:
+      operationId: auth_login_create
+      description: |-
+        POST /api/auth/login/ -> JWT access + refresh tokens.
+
+        With `X-Auth-Mode: cookie` the refresh token is set as an httpOnly cookie
+        instead of returned in the body.
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MyTokenObtainPairRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/MyTokenObtainPairRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/MyTokenObtainPairRequest'
+        required: true
+      security:
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /api/auth/logout/:
+    post:
+      operationId: auth_logout_create
+      description: |-
+        POST /api/auth/logout/ — revoke the refresh token (body or cookie) and
+        clear the cookie. Always 204: logging out twice isn't an error.
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LogoutRequestRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/LogoutRequestRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/LogoutRequestRequest'
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '204':
+          description: Logged out
+  /api/auth/me/:
+    get:
+      operationId: auth_me_retrieve
+      description: GET /api/auth/me/, PATCH /api/auth/me/ (phone + profile fields)
+      tags:
+      - auth
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+    patch:
+      operationId: auth_me_partial_update
+      description: GET /api/auth/me/, PATCH /api/auth/me/ (phone + profile fields)
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedMeUpdateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedMeUpdateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedMeUpdateRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+  /api/auth/password-reset/:
+    post:
+      operationId: auth_password_reset_create
+      description: |-
+        POST /api/auth/password-reset/  {email}
+
+        Always returns 200 with the same generic message whether or not the
+        email belongs to a real account — confirming/denying an email's
+        existence here is a real account-enumeration vector, not a detail worth
+        trading away for a slightly more specific response. Uses Django's own
+        `default_token_generator` (the same primitive `PasswordResetView` uses
+        for the stock HTML flow), just surfaced as a JSON API for this SPA.
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordResetRequestRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PasswordResetRequestRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PasswordResetRequestRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Detail'
+          description: ''
+  /api/auth/password-reset/confirm/:
+    post:
+      operationId: auth_password_reset_confirm_create
+      description: POST /api/auth/password-reset/confirm/  {uid, token, new_password}
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordResetConfirmRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PasswordResetConfirmRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PasswordResetConfirmRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Detail'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Detail'
+          description: ''
+  /api/auth/refresh/:
+    post:
+      operationId: auth_refresh_create
+      description: |-
+        POST /api/auth/refresh/ — body `{refresh}` (app) or the refresh cookie (web).
+
+        Refresh tokens rotate and the old one is blacklisted, so a leaked refresh
+        token stops working the next time the real client refreshes.
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenRefreshRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TokenRefreshRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TokenRefreshRequest'
+        required: true
+      security:
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenRefresh'
+          description: ''
+  /api/auth/register/:
+    post:
+      operationId: auth_register_create
+      description: POST /api/auth/register/
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Register'
+          description: ''
+  /api/auth/users/:
+    get:
+      operationId: auth_users_list
+      description: |-
+        /api/auth/users/            (list, admin only)
+        /api/auth/users/{id}/       (retrieve, partial_update — is_active only)
+
+        Read/toggle only: email/phone/role edits and user creation/deletion are
+        out of scope for this endpoint (registration owns creation).
+      parameters:
+      - in: query
+        name: is_active
+        schema:
+          type: boolean
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: role
+        schema:
+          type: string
+          enum:
+          - ADMIN
+          - BUYER
+          - SELLER
+          - VERIFIER
+        description: |-
+          * `SELLER` - Seller
+          * `BUYER` - Buyer
+          * `ADMIN` - Admin
+          * `VERIFIER` - Verifier
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - auth
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAdminUserList'
+          description: ''
+  /api/auth/users/{id}/:
+    get:
+      operationId: auth_users_retrieve
+      description: |-
+        /api/auth/users/            (list, admin only)
+        /api/auth/users/{id}/       (retrieve, partial_update — is_active only)
+
+        Read/toggle only: email/phone/role edits and user creation/deletion are
+        out of scope for this endpoint (registration owns creation).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this user.
+        required: true
+      tags:
+      - auth
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUser'
+          description: ''
+    patch:
+      operationId: auth_users_partial_update
+      description: |-
+        /api/auth/users/            (list, admin only)
+        /api/auth/users/{id}/       (retrieve, partial_update — is_active only)
+
+        Read/toggle only: email/phone/role edits and user creation/deletion are
+        out of scope for this endpoint (registration owns creation).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this user.
+        required: true
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedAdminUserRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedAdminUserRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedAdminUserRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUser'
+          description: ''
+  /api/catalog/listings/:
+    get:
+      operationId: catalog_listings_list
+      description: |-
+        /api/catalog/listings/                       (list, create — idempotent on client_uuid)
+        /api/catalog/listings/{id}/                   (retrieve, update, destroy)
+        /api/catalog/listings/{id}/evidence/          (GET list, POST file upload)
+        /api/catalog/listings/{id}/grading/           (GET grading results)
+        /api/catalog/listings/{id}/grading/trigger/   (POST -> triggers FastAPI grading)
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      - in: query
+        name: seller
+        schema:
+          type: integer
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - ACTIVE
+          - DRAFT
+          - EXPIRED
+          - PENDING_GRADING
+          - PENDING_VERIFICATION
+          - SOLD
+        description: |-
+          * `DRAFT` - Draft
+          * `PENDING_GRADING` - Pending Grading
+          * `PENDING_VERIFICATION` - Pending Verification
+          * `ACTIVE` - Active
+          * `SOLD` - Sold
+          * `EXPIRED` - Expired
+      - in: query
+        name: vertical
+        schema:
+          type: integer
+      tags:
+      - catalog
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedListingList'
+          description: ''
+    post:
+      operationId: catalog_listings_create
+      description: |-
+        /api/catalog/listings/                       (list, create — idempotent on client_uuid)
+        /api/catalog/listings/{id}/                   (retrieve, update, destroy)
+        /api/catalog/listings/{id}/evidence/          (GET list, POST file upload)
+        /api/catalog/listings/{id}/grading/           (GET grading results)
+        /api/catalog/listings/{id}/grading/trigger/   (POST -> triggers FastAPI grading)
+      tags:
+      - catalog
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ListingRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ListingRequest'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ListingRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Listing'
+          description: ''
+  /api/catalog/listings/{id}/:
+    get:
+      operationId: catalog_listings_retrieve
+      description: |-
+        /api/catalog/listings/                       (list, create — idempotent on client_uuid)
+        /api/catalog/listings/{id}/                   (retrieve, update, destroy)
+        /api/catalog/listings/{id}/evidence/          (GET list, POST file upload)
+        /api/catalog/listings/{id}/grading/           (GET grading results)
+        /api/catalog/listings/{id}/grading/trigger/   (POST -> triggers FastAPI grading)
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this listing.
+        required: true
+      tags:
+      - catalog
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Listing'
+          description: ''
+    put:
+      operationId: catalog_listings_update
+      description: |-
+        /api/catalog/listings/                       (list, create — idempotent on client_uuid)
+        /api/catalog/listings/{id}/                   (retrieve, update, destroy)
+        /api/catalog/listings/{id}/evidence/          (GET list, POST file upload)
+        /api/catalog/listings/{id}/grading/           (GET grading results)
+        /api/catalog/listings/{id}/grading/trigger/   (POST -> triggers FastAPI grading)
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this listing.
+        required: true
+      tags:
+      - catalog
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ListingRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ListingRequest'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ListingRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Listing'
+          description: ''
+    patch:
+      operationId: catalog_listings_partial_update
+      description: |-
+        /api/catalog/listings/                       (list, create — idempotent on client_uuid)
+        /api/catalog/listings/{id}/                   (retrieve, update, destroy)
+        /api/catalog/listings/{id}/evidence/          (GET list, POST file upload)
+        /api/catalog/listings/{id}/grading/           (GET grading results)
+        /api/catalog/listings/{id}/grading/trigger/   (POST -> triggers FastAPI grading)
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this listing.
+        required: true
+      tags:
+      - catalog
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedListingRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedListingRequest'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedListingRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Listing'
+          description: ''
+    delete:
+      operationId: catalog_listings_destroy
+      description: |-
+        /api/catalog/listings/                       (list, create — idempotent on client_uuid)
+        /api/catalog/listings/{id}/                   (retrieve, update, destroy)
+        /api/catalog/listings/{id}/evidence/          (GET list, POST file upload)
+        /api/catalog/listings/{id}/grading/           (GET grading results)
+        /api/catalog/listings/{id}/grading/trigger/   (POST -> triggers FastAPI grading)
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this listing.
+        required: true
+      tags:
+      - catalog
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/catalog/listings/{id}/evidence/:
+    get:
+      operationId: catalog_listings_evidence_retrieve
+      description: |-
+        /api/catalog/listings/                       (list, create — idempotent on client_uuid)
+        /api/catalog/listings/{id}/                   (retrieve, update, destroy)
+        /api/catalog/listings/{id}/evidence/          (GET list, POST file upload)
+        /api/catalog/listings/{id}/grading/           (GET grading results)
+        /api/catalog/listings/{id}/grading/trigger/   (POST -> triggers FastAPI grading)
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this listing.
+        required: true
+      tags:
+      - catalog
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Listing'
+          description: ''
+    post:
+      operationId: catalog_listings_evidence_create
+      description: |-
+        /api/catalog/listings/                       (list, create — idempotent on client_uuid)
+        /api/catalog/listings/{id}/                   (retrieve, update, destroy)
+        /api/catalog/listings/{id}/evidence/          (GET list, POST file upload)
+        /api/catalog/listings/{id}/grading/           (GET grading results)
+        /api/catalog/listings/{id}/grading/trigger/   (POST -> triggers FastAPI grading)
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this listing.
+        required: true
+      tags:
+      - catalog
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ListingRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ListingRequest'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ListingRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Listing'
+          description: ''
+  /api/catalog/listings/{id}/grading/:
+    get:
+      operationId: catalog_listings_grading_retrieve
+      description: |-
+        /api/catalog/listings/                       (list, create — idempotent on client_uuid)
+        /api/catalog/listings/{id}/                   (retrieve, update, destroy)
+        /api/catalog/listings/{id}/evidence/          (GET list, POST file upload)
+        /api/catalog/listings/{id}/grading/           (GET grading results)
+        /api/catalog/listings/{id}/grading/trigger/   (POST -> triggers FastAPI grading)
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this listing.
+        required: true
+      tags:
+      - catalog
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Listing'
+          description: ''
+  /api/catalog/listings/{id}/grading/trigger/:
+    post:
+      operationId: catalog_listings_grading_trigger_create
+      description: |-
+        /api/catalog/listings/                       (list, create — idempotent on client_uuid)
+        /api/catalog/listings/{id}/                   (retrieve, update, destroy)
+        /api/catalog/listings/{id}/evidence/          (GET list, POST file upload)
+        /api/catalog/listings/{id}/grading/           (GET grading results)
+        /api/catalog/listings/{id}/grading/trigger/   (POST -> triggers FastAPI grading)
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this listing.
+        required: true
+      tags:
+      - catalog
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ListingRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ListingRequest'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ListingRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Listing'
+          description: ''
+  /api/config/verticals/:
+    get:
+      operationId: config_verticals_list
+      description: |-
+        /api/config/verticals/            (list, create)
+        /api/config/verticals/{id}/       (retrieve, update, destroy)
+      parameters:
+      - in: query
+        name: is_active
+        schema:
+          type: boolean
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - config
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedVerticalList'
+          description: ''
+    post:
+      operationId: config_verticals_create
+      description: |-
+        /api/config/verticals/            (list, create)
+        /api/config/verticals/{id}/       (retrieve, update, destroy)
+      tags:
+      - config
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerticalRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/VerticalRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/VerticalRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Vertical'
+          description: ''
+  /api/config/verticals/{id}/:
+    get:
+      operationId: config_verticals_retrieve
+      description: |-
+        /api/config/verticals/            (list, create)
+        /api/config/verticals/{id}/       (retrieve, update, destroy)
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this vertical.
+        required: true
+      tags:
+      - config
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Vertical'
+          description: ''
+    put:
+      operationId: config_verticals_update
+      description: |-
+        /api/config/verticals/            (list, create)
+        /api/config/verticals/{id}/       (retrieve, update, destroy)
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this vertical.
+        required: true
+      tags:
+      - config
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerticalRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/VerticalRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/VerticalRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Vertical'
+          description: ''
+    patch:
+      operationId: config_verticals_partial_update
+      description: |-
+        /api/config/verticals/            (list, create)
+        /api/config/verticals/{id}/       (retrieve, update, destroy)
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this vertical.
+        required: true
+      tags:
+      - config
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedVerticalRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedVerticalRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedVerticalRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Vertical'
+          description: ''
+    delete:
+      operationId: config_verticals_destroy
+      description: |-
+        /api/config/verticals/            (list, create)
+        /api/config/verticals/{id}/       (retrieve, update, destroy)
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this vertical.
+        required: true
+      tags:
+      - config
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/config/verticals/{vertical_id}/grading-schema/:
+    get:
+      operationId: config_verticals_grading_schema_retrieve
+      description: GET/PUT /api/config/verticals/{id}/grading-schema/
+      parameters:
+      - in: path
+        name: vertical_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - config
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GradingSchema'
+          description: ''
+    put:
+      operationId: config_verticals_grading_schema_update
+      description: GET/PUT /api/config/verticals/{id}/grading-schema/
+      parameters:
+      - in: path
+        name: vertical_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - config
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GradingSchemaRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/GradingSchemaRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/GradingSchemaRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GradingSchema'
+          description: ''
+  /api/config/verticals/{vertical_id}/pricing-rules/:
+    get:
+      operationId: config_verticals_pricing_rules_retrieve
+      description: GET/PUT /api/config/verticals/{id}/pricing-rules/
+      parameters:
+      - in: path
+        name: vertical_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - config
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PricingRule'
+          description: ''
+    put:
+      operationId: config_verticals_pricing_rules_update
+      description: GET/PUT /api/config/verticals/{id}/pricing-rules/
+      parameters:
+      - in: path
+        name: vertical_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - config
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PricingRuleRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PricingRuleRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PricingRuleRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PricingRule'
+          description: ''
+  /api/disputes/:
+    get:
+      operationId: disputes_list
+      description: |-
+        /api/disputes/       (list, create)
+        /api/disputes/{id}/  (retrieve, update)
+      parameters:
+      - in: query
+        name: order
+        schema:
+          type: integer
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - ESCALATED
+          - OPEN
+          - RESOLVED
+          - UNDER_REVIEW
+        description: |-
+          * `OPEN` - Open
+          * `UNDER_REVIEW` - Under Review
+          * `RESOLVED` - Resolved
+          * `ESCALATED` - Escalated
+      - in: query
+        name: type
+        schema:
+          type: string
+          enum:
+          - GRADE_MISMATCH
+          - OTHER
+          - QUALITY_DEFECT
+          - QUANTITY_SHORTAGE
+        description: |-
+          * `GRADE_MISMATCH` - Grade Mismatch
+          * `QUANTITY_SHORTAGE` - Quantity Shortage
+          * `QUALITY_DEFECT` - Quality Defect
+          * `OTHER` - Other
+      tags:
+      - disputes
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedDisputeList'
+          description: ''
+    post:
+      operationId: disputes_create
+      description: |-
+        /api/disputes/       (list, create)
+        /api/disputes/{id}/  (retrieve, update)
+      tags:
+      - disputes
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DisputeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DisputeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DisputeRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Dispute'
+          description: ''
+  /api/disputes/{id}/:
+    get:
+      operationId: disputes_retrieve
+      description: |-
+        /api/disputes/       (list, create)
+        /api/disputes/{id}/  (retrieve, update)
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this dispute.
+        required: true
+      tags:
+      - disputes
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Dispute'
+          description: ''
+    put:
+      operationId: disputes_update
+      description: |-
+        /api/disputes/       (list, create)
+        /api/disputes/{id}/  (retrieve, update)
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this dispute.
+        required: true
+      tags:
+      - disputes
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DisputeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DisputeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DisputeRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Dispute'
+          description: ''
+    patch:
+      operationId: disputes_partial_update
+      description: |-
+        /api/disputes/       (list, create)
+        /api/disputes/{id}/  (retrieve, update)
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this dispute.
+        required: true
+      tags:
+      - disputes
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedDisputeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedDisputeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedDisputeRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Dispute'
+          description: ''
+    delete:
+      operationId: disputes_destroy
+      description: |-
+        /api/disputes/       (list, create)
+        /api/disputes/{id}/  (retrieve, update)
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this dispute.
+        required: true
+      tags:
+      - disputes
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/notifications/:
+    get:
+      operationId: notifications_list
+      description: GET /api/notifications/  — the current user's notifications.
+      parameters:
+      - in: query
+        name: is_read
+        schema:
+          type: boolean
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      - in: query
+        name: type
+        schema:
+          type: string
+          enum:
+          - BID_RECEIVED
+          - DISPUTE_UPDATE
+          - GRADING_COMPLETE
+          - ORDER_MATCHED
+          - SYSTEM
+        description: |-
+          * `GRADING_COMPLETE` - Grading Complete
+          * `ORDER_MATCHED` - Order Matched
+          * `BID_RECEIVED` - Bid Received
+          * `DISPUTE_UPDATE` - Dispute Update
+          * `SYSTEM` - System
+      tags:
+      - notifications
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedNotificationList'
+          description: ''
+  /api/notifications/{id}/read/:
+    post:
+      operationId: notifications_read_create
+      description: POST /api/notifications/{id}/read/
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - notifications
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Notification'
+          description: ''
+  /api/notifications/devices/:
+    post:
+      operationId: notifications_devices_create
+      description: |-
+        POST /api/notifications/devices/  {token, platform}
+
+        Upsert on the token itself: registering a token already held by another
+        account moves it to the caller (same physical device, new login).
+        201 when newly registered, 200 when it already existed.
+      tags:
+      - notifications
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeviceTokenRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DeviceTokenRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DeviceTokenRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceToken'
+          description: ''
+  /api/notifications/devices/unregister/:
+    post:
+      operationId: notifications_devices_unregister_create
+      description: |-
+        POST /api/notifications/devices/unregister/  {token}
+
+        Called on logout. Only removes the caller's own token; always 204 so it
+        stays safe to retry.
+      tags:
+      - notifications
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeviceTokenUnregisterRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DeviceTokenUnregisterRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DeviceTokenUnregisterRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: Unregistered
+  /api/notifications/read-all/:
+    post:
+      operationId: notifications_read_all_create
+      description: POST /api/notifications/read-all/
+      tags:
+      - notifications
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarkedRead'
+          description: ''
+  /api/orders/bids/:
+    get:
+      operationId: orders_bids_list
+      description: |-
+        /api/orders/bids/                (list, create)
+        /api/orders/bids/{id}/           (retrieve, update [accept/reject])
+        /api/orders/bids/{id}/counter/   (POST -> counter-offer)
+      parameters:
+      - in: query
+        name: listing
+        schema:
+          type: integer
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - ACCEPTED
+          - COUNTERED
+          - EXPIRED
+          - PENDING
+          - REJECTED
+        description: |-
+          * `PENDING` - Pending
+          * `ACCEPTED` - Accepted
+          * `REJECTED` - Rejected
+          * `COUNTERED` - Countered
+          * `EXPIRED` - Expired
+      tags:
+      - orders
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedBidList'
+          description: ''
+    post:
+      operationId: orders_bids_create
+      description: |-
+        /api/orders/bids/                (list, create)
+        /api/orders/bids/{id}/           (retrieve, update [accept/reject])
+        /api/orders/bids/{id}/counter/   (POST -> counter-offer)
+      tags:
+      - orders
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BidRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/BidRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/BidRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Bid'
+          description: ''
+  /api/orders/bids/{id}/:
+    get:
+      operationId: orders_bids_retrieve
+      description: |-
+        /api/orders/bids/                (list, create)
+        /api/orders/bids/{id}/           (retrieve, update [accept/reject])
+        /api/orders/bids/{id}/counter/   (POST -> counter-offer)
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this bid.
+        required: true
+      tags:
+      - orders
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Bid'
+          description: ''
+    put:
+      operationId: orders_bids_update
+      description: |-
+        /api/orders/bids/                (list, create)
+        /api/orders/bids/{id}/           (retrieve, update [accept/reject])
+        /api/orders/bids/{id}/counter/   (POST -> counter-offer)
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this bid.
+        required: true
+      tags:
+      - orders
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BidRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/BidRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/BidRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Bid'
+          description: ''
+    patch:
+      operationId: orders_bids_partial_update
+      description: |-
+        /api/orders/bids/                (list, create)
+        /api/orders/bids/{id}/           (retrieve, update [accept/reject])
+        /api/orders/bids/{id}/counter/   (POST -> counter-offer)
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this bid.
+        required: true
+      tags:
+      - orders
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedBidRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedBidRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedBidRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Bid'
+          description: ''
+    delete:
+      operationId: orders_bids_destroy
+      description: |-
+        /api/orders/bids/                (list, create)
+        /api/orders/bids/{id}/           (retrieve, update [accept/reject])
+        /api/orders/bids/{id}/counter/   (POST -> counter-offer)
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this bid.
+        required: true
+      tags:
+      - orders
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/orders/bids/{id}/counter/:
+    post:
+      operationId: orders_bids_counter_create
+      description: |-
+        Counter a PENDING offer with a new price (and optionally quantity).
+
+        Only the party whose move it is may counter — the seller on a
+        buyer's bid, the buyer on a seller's counter-offer — so the two sides
+        alternate. The original offer is marked COUNTERED and a new PENDING
+        bid is created, linked via `parent_bid`, with `proposed_by` set to
+        the caller; accepting *that* bid is then the other party's call
+        (enforced by BidSerializer.validate). The new bid always keeps the
+        original `buyer`, since that's who the eventual Order belongs to.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this bid.
+        required: true
+      tags:
+      - orders
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BidRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/BidRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/BidRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Bid'
+          description: ''
+  /api/orders/orders/:
+    get:
+      operationId: orders_orders_list
+      description: |-
+        /api/orders/orders/       (list)
+        /api/orders/orders/{id}/  (retrieve)
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - CANCELLED
+          - CONFIRMED
+          - DISPUTED
+          - FULFILLED
+          - PENDING
+        description: |-
+          * `PENDING` - Pending
+          * `CONFIRMED` - Confirmed
+          * `FULFILLED` - Fulfilled
+          * `DISPUTED` - Disputed
+          * `CANCELLED` - Cancelled
+      tags:
+      - orders
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedOrderList'
+          description: ''
+  /api/orders/orders/{id}/:
+    get:
+      operationId: orders_orders_retrieve
+      description: |-
+        /api/orders/orders/       (list)
+        /api/orders/orders/{id}/  (retrieve)
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this order.
+        required: true
+      tags:
+      - orders
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+          description: ''
+  /api/orders/requirements/:
+    get:
+      operationId: orders_requirements_list
+      description: |-
+        /api/orders/requirements/            (list, create)
+        /api/orders/requirements/{id}/       (retrieve, update, destroy)
+        /api/orders/requirements/{id}/match/ (POST -> triggers FastAPI matching/allocation)
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - CANCELLED
+          - FULFILLED
+          - MATCHED
+          - OPEN
+        description: |-
+          * `OPEN` - Open
+          * `MATCHED` - Matched
+          * `FULFILLED` - Fulfilled
+          * `CANCELLED` - Cancelled
+      - in: query
+        name: vertical
+        schema:
+          type: integer
+      tags:
+      - orders
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedRequirementList'
+          description: ''
+    post:
+      operationId: orders_requirements_create
+      description: |-
+        /api/orders/requirements/            (list, create)
+        /api/orders/requirements/{id}/       (retrieve, update, destroy)
+        /api/orders/requirements/{id}/match/ (POST -> triggers FastAPI matching/allocation)
+      tags:
+      - orders
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RequirementRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/RequirementRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/RequirementRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Requirement'
+          description: ''
+  /api/orders/requirements/{id}/:
+    get:
+      operationId: orders_requirements_retrieve
+      description: |-
+        /api/orders/requirements/            (list, create)
+        /api/orders/requirements/{id}/       (retrieve, update, destroy)
+        /api/orders/requirements/{id}/match/ (POST -> triggers FastAPI matching/allocation)
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this requirement.
+        required: true
+      tags:
+      - orders
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Requirement'
+          description: ''
+    put:
+      operationId: orders_requirements_update
+      description: |-
+        /api/orders/requirements/            (list, create)
+        /api/orders/requirements/{id}/       (retrieve, update, destroy)
+        /api/orders/requirements/{id}/match/ (POST -> triggers FastAPI matching/allocation)
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this requirement.
+        required: true
+      tags:
+      - orders
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RequirementRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/RequirementRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/RequirementRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Requirement'
+          description: ''
+    patch:
+      operationId: orders_requirements_partial_update
+      description: |-
+        /api/orders/requirements/            (list, create)
+        /api/orders/requirements/{id}/       (retrieve, update, destroy)
+        /api/orders/requirements/{id}/match/ (POST -> triggers FastAPI matching/allocation)
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this requirement.
+        required: true
+      tags:
+      - orders
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedRequirementRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedRequirementRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedRequirementRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Requirement'
+          description: ''
+    delete:
+      operationId: orders_requirements_destroy
+      description: |-
+        /api/orders/requirements/            (list, create)
+        /api/orders/requirements/{id}/       (retrieve, update, destroy)
+        /api/orders/requirements/{id}/match/ (POST -> triggers FastAPI matching/allocation)
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this requirement.
+        required: true
+      tags:
+      - orders
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/orders/requirements/{id}/match/:
+    post:
+      operationId: orders_requirements_match_create
+      description: |-
+        Proxies to FastAPI's POST /compute/matching/allocate.
+
+        Nothing else in this codebase ever calls the matching engine — the
+        buyer requirements UI's own copy ("the matching engine finds
+        sellers for you") was previously just aspirational text. A
+        requirement staying unmatched (no listings yet, or none within
+        price/grade/radius) is a normal, expected outcome, not an error —
+        this always returns 200 with `matched: true/false`, mirroring how
+        `catalog/views.py:trigger_grading` proxies FastAPI's grading call.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this requirement.
+        required: true
+      tags:
+      - orders
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RequirementRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/RequirementRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/RequirementRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Requirement'
+          description: ''
+  /api/pricing/price-points/:
+    get:
+      operationId: pricing_price_points_list
+      description: |-
+        GET  /api/pricing/price-points/  — list (read-only for any authenticated user)
+        POST /api/pricing/price-points/  — admin manually enters a price
+                                            (source=ADMIN_ENTERED use case)
+      parameters:
+      - in: query
+        name: commodity
+        schema:
+          type: string
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: region
+        schema:
+          type: string
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      - in: query
+        name: source
+        schema:
+          type: string
+          enum:
+          - ADMIN_ENTERED
+          - AGMARKNET
+          - CCI
+        description: |-
+          * `AGMARKNET` - AGMARKNET
+          * `ADMIN_ENTERED` - Admin Entered
+          * `CCI` - CCI
+      - in: query
+        name: vertical
+        schema:
+          type: integer
+      tags:
+      - pricing
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPricePointList'
+          description: ''
+    post:
+      operationId: pricing_price_points_create
+      description: |-
+        GET  /api/pricing/price-points/  — list (read-only for any authenticated user)
+        POST /api/pricing/price-points/  — admin manually enters a price
+                                            (source=ADMIN_ENTERED use case)
+      tags:
+      - pricing
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PricePointRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PricePointRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PricePointRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PricePoint'
+          description: ''
+  /api/reputation/{user_id}/:
+    get:
+      operationId: reputation_retrieve
+      description: GET /api/reputation/{user_id}/
+      parameters:
+      - in: path
+        name: user_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - reputation
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReputationScore'
+          description: ''
+  /api/verification/queue/:
+    get:
+      operationId: verification_queue_list
+      description: |-
+        GET /api/verification/queue/  (Verifier + Admin only)
+
+        Returns an enriched view per listing — grade/confidence (derived via
+        catalog/grading.py, §12), priority, a human-readable flagged reason, and
+        evidence count — rather than a bare ListingSerializer, since that's what
+        the verifier/admin queue UIs actually need to render without each
+        fetching grading data separately per listing.
+      tags:
+      - verification
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/VerificationQueueItem'
+          description: ''
+  /api/verification/queue/{listing_id}/review/:
+    post:
+      operationId: verification_queue_review_create
+      description: |-
+        POST /api/verification/queue/{listing_id}/review/
+
+        Body: {"decision": "APPROVE"|"REJECT", "notes": str, "attribute_scores": {...}}
+      parameters:
+      - in: path
+        name: listing_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - verification
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerificationReviewRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/VerificationReviewRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/VerificationReviewRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Listing'
+          description: ''
+components:
+  schemas:
+    AdminUser:
+      type: object
+      description: |-
+        Admin user-management list/detail. Only `is_active` is writable here —
+        email/phone/role changes are out of scope for this endpoint.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        email:
+          type: string
+          format: email
+          readOnly: true
+        phone:
+          type: string
+          readOnly: true
+        role:
+          allOf:
+          - $ref: '#/components/schemas/RoleEnum'
+          readOnly: true
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        profile:
+          $ref: '#/components/schemas/UserProfile'
+      required:
+      - created_at
+      - email
+      - id
+      - phone
+      - role
+    Bid:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        listing:
+          type: integer
+        commodity_name:
+          type: string
+          readOnly: true
+        unit:
+          type: string
+          readOnly: true
+        buyer:
+          type: integer
+          readOnly: true
+        buyer_name:
+          type: string
+          readOnly: true
+        proposed_by:
+          type: integer
+          readOnly: true
+        offered_price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        offered_quantity:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        status:
+          $ref: '#/components/schemas/BidStatusEnum'
+        parent_bid:
+          type: integer
+          readOnly: true
+          nullable: true
+        message:
+          type: string
+        awaiting_response_from:
+          type: string
+          nullable: true
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - awaiting_response_from
+      - buyer
+      - buyer_name
+      - commodity_name
+      - created_at
+      - id
+      - listing
+      - offered_price
+      - offered_quantity
+      - parent_bid
+      - proposed_by
+      - unit
+    BidRequest:
+      type: object
+      properties:
+        listing:
+          type: integer
+        offered_price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        offered_quantity:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        status:
+          $ref: '#/components/schemas/BidStatusEnum'
+        message:
+          type: string
+      required:
+      - listing
+      - offered_price
+      - offered_quantity
+    BidStatusEnum:
+      enum:
+      - PENDING
+      - ACCEPTED
+      - REJECTED
+      - COUNTERED
+      - EXPIRED
+      type: string
+      description: |-
+        * `PENDING` - Pending
+        * `ACCEPTED` - Accepted
+        * `REJECTED` - Rejected
+        * `COUNTERED` - Countered
+        * `EXPIRED` - Expired
+    DecisionEnum:
+      enum:
+      - APPROVE
+      - REJECT
+      type: string
+      description: |-
+        * `APPROVE` - APPROVE
+        * `REJECT` - REJECT
+    Detail:
+      type: object
+      properties:
+        detail:
+          type: string
+      required:
+      - detail
+    DeviceToken:
+      type: object
+      properties:
+        token:
+          type: string
+          maxLength: 512
+        platform:
+          allOf:
+          - $ref: '#/components/schemas/PlatformEnum'
+          default: ANDROID
+      required:
+      - token
+    DeviceTokenRequest:
+      type: object
+      properties:
+        token:
+          type: string
+          minLength: 1
+          maxLength: 512
+        platform:
+          allOf:
+          - $ref: '#/components/schemas/PlatformEnum'
+          default: ANDROID
+      required:
+      - token
+    DeviceTokenUnregisterRequest:
+      type: object
+      properties:
+        token:
+          type: string
+          minLength: 1
+          maxLength: 512
+      required:
+      - token
+    Dispute:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        order:
+          type: integer
+        raised_by:
+          type: integer
+          readOnly: true
+        raised_by_name:
+          type: string
+          readOnly: true
+        against:
+          type: integer
+        against_name:
+          type: string
+          readOnly: true
+        type:
+          $ref: '#/components/schemas/DisputeTypeEnum'
+        status:
+          $ref: '#/components/schemas/DisputeStatusEnum'
+        description:
+          type: string
+        evidence_refs: {}
+        resolution_notes:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        resolved_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+      required:
+      - against
+      - against_name
+      - created_at
+      - id
+      - order
+      - raised_by
+      - raised_by_name
+      - resolved_at
+      - type
+    DisputeRequest:
+      type: object
+      properties:
+        order:
+          type: integer
+        against:
+          type: integer
+        type:
+          $ref: '#/components/schemas/DisputeTypeEnum'
+        status:
+          $ref: '#/components/schemas/DisputeStatusEnum'
+        description:
+          type: string
+        evidence_refs: {}
+        resolution_notes:
+          type: string
+      required:
+      - against
+      - order
+      - type
+    DisputeStatusEnum:
+      enum:
+      - OPEN
+      - UNDER_REVIEW
+      - RESOLVED
+      - ESCALATED
+      type: string
+      description: |-
+        * `OPEN` - Open
+        * `UNDER_REVIEW` - Under Review
+        * `RESOLVED` - Resolved
+        * `ESCALATED` - Escalated
+    DisputeTypeEnum:
+      enum:
+      - GRADE_MISMATCH
+      - QUANTITY_SHORTAGE
+      - QUALITY_DEFECT
+      - OTHER
+      type: string
+      description: |-
+        * `GRADE_MISMATCH` - Grade Mismatch
+        * `QUANTITY_SHORTAGE` - Quantity Shortage
+        * `QUALITY_DEFECT` - Quality Defect
+        * `OTHER` - Other
+    GradingSchema:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        vertical:
+          type: integer
+          readOnly: true
+        attributes: {}
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - id
+      - updated_at
+      - vertical
+    GradingSchemaRequest:
+      type: object
+      properties:
+        attributes: {}
+    Listing:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        client_uuid:
+          type: string
+          format: uuid
+        seller:
+          type: integer
+          readOnly: true
+        seller_name:
+          type: string
+          readOnly: true
+        vertical:
+          type: integer
+        commodity_name:
+          type: string
+          maxLength: 150
+        sub_category:
+          type: string
+          maxLength: 150
+        quantity:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        unit:
+          type: string
+          maxLength: 30
+        price_suggested:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          nullable: true
+        price_final:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          nullable: true
+        location_lat:
+          type: number
+          format: double
+          nullable: true
+        location_lng:
+          type: number
+          format: double
+          nullable: true
+        region:
+          type: string
+          maxLength: 150
+        status:
+          allOf:
+          - $ref: '#/components/schemas/ListingStatusEnum'
+          readOnly: true
+        grade:
+          type: string
+          nullable: true
+          readOnly: true
+        grade_confidence:
+          type: number
+          format: double
+          nullable: true
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - commodity_name
+      - created_at
+      - grade
+      - grade_confidence
+      - id
+      - quantity
+      - seller
+      - seller_name
+      - status
+      - unit
+      - updated_at
+      - vertical
+    ListingRequest:
+      type: object
+      properties:
+        client_uuid:
+          type: string
+          format: uuid
+        vertical:
+          type: integer
+        commodity_name:
+          type: string
+          minLength: 1
+          maxLength: 150
+        sub_category:
+          type: string
+          maxLength: 150
+        quantity:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        unit:
+          type: string
+          minLength: 1
+          maxLength: 30
+        price_suggested:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          nullable: true
+        price_final:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          nullable: true
+        location_lat:
+          type: number
+          format: double
+          nullable: true
+        location_lng:
+          type: number
+          format: double
+          nullable: true
+        region:
+          type: string
+          maxLength: 150
+      required:
+      - commodity_name
+      - quantity
+      - unit
+      - vertical
+    ListingStatusEnum:
+      enum:
+      - DRAFT
+      - PENDING_GRADING
+      - PENDING_VERIFICATION
+      - ACTIVE
+      - SOLD
+      - EXPIRED
+      type: string
+      description: |-
+        * `DRAFT` - Draft
+        * `PENDING_GRADING` - Pending Grading
+        * `PENDING_VERIFICATION` - Pending Verification
+        * `ACTIVE` - Active
+        * `SOLD` - Sold
+        * `EXPIRED` - Expired
+    LogoutRequestRequest:
+      type: object
+      properties:
+        refresh:
+          type: string
+          minLength: 1
+    MarkedRead:
+      type: object
+      properties:
+        marked_read:
+          type: integer
+      required:
+      - marked_read
+    MyTokenObtainPairRequest:
+      type: object
+      description: Adds role/email claims to the JWT, and logs in via `email`.
+      properties:
+        email:
+          type: string
+          writeOnly: true
+          minLength: 1
+        password:
+          type: string
+          writeOnly: true
+          minLength: 1
+      required:
+      - email
+      - password
+    Notification:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        user:
+          type: integer
+          readOnly: true
+        type:
+          $ref: '#/components/schemas/NotificationTypeEnum'
+        title:
+          type: string
+          maxLength: 200
+        message:
+          type: string
+        related_object_type:
+          type: string
+          maxLength: 50
+        related_object_id:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          nullable: true
+        is_read:
+          type: boolean
+        fcm_sent:
+          type: boolean
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - fcm_sent
+      - id
+      - title
+      - type
+      - user
+    NotificationTypeEnum:
+      enum:
+      - GRADING_COMPLETE
+      - ORDER_MATCHED
+      - BID_RECEIVED
+      - DISPUTE_UPDATE
+      - SYSTEM
+      type: string
+      description: |-
+        * `GRADING_COMPLETE` - Grading Complete
+        * `ORDER_MATCHED` - Order Matched
+        * `BID_RECEIVED` - Bid Received
+        * `DISPUTE_UPDATE` - Dispute Update
+        * `SYSTEM` - System
+    Order:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        requirement:
+          type: integer
+          nullable: true
+        buyer:
+          type: integer
+          readOnly: true
+        status:
+          $ref: '#/components/schemas/OrderStatusEnum'
+        total_price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        allocations:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderAllocation'
+          readOnly: true
+      required:
+      - allocations
+      - buyer
+      - created_at
+      - id
+    OrderAllocation:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        order:
+          type: integer
+        listing:
+          type: integer
+        commodity_name:
+          type: string
+          readOnly: true
+        unit:
+          type: string
+          readOnly: true
+        seller_name:
+          type: string
+          readOnly: true
+        allocated_quantity:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        unit_price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        status:
+          $ref: '#/components/schemas/OrderAllocationStatusEnum'
+      required:
+      - allocated_quantity
+      - commodity_name
+      - id
+      - listing
+      - order
+      - seller_name
+      - unit
+      - unit_price
+    OrderAllocationStatusEnum:
+      enum:
+      - PENDING
+      - CONFIRMED
+      - DELIVERED
+      - CANCELLED
+      type: string
+      description: |-
+        * `PENDING` - Pending
+        * `CONFIRMED` - Confirmed
+        * `DELIVERED` - Delivered
+        * `CANCELLED` - Cancelled
+    OrderStatusEnum:
+      enum:
+      - PENDING
+      - CONFIRMED
+      - FULFILLED
+      - DISPUTED
+      - CANCELLED
+      type: string
+      description: |-
+        * `PENDING` - Pending
+        * `CONFIRMED` - Confirmed
+        * `FULFILLED` - Fulfilled
+        * `DISPUTED` - Disputed
+        * `CANCELLED` - Cancelled
+    PaginatedAdminUserList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminUser'
+    PaginatedBidList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Bid'
+    PaginatedDisputeList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Dispute'
+    PaginatedListingList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Listing'
+    PaginatedNotificationList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Notification'
+    PaginatedOrderList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Order'
+    PaginatedPricePointList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PricePoint'
+    PaginatedRequirementList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Requirement'
+    PaginatedVerticalList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Vertical'
+    PasswordResetConfirmRequest:
+      type: object
+      properties:
+        uid:
+          type: string
+          minLength: 1
+        token:
+          type: string
+          minLength: 1
+        new_password:
+          type: string
+          minLength: 8
+      required:
+      - new_password
+      - token
+      - uid
+    PasswordResetRequestRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          minLength: 1
+      required:
+      - email
+    PatchedAdminUserRequest:
+      type: object
+      description: |-
+        Admin user-management list/detail. Only `is_active` is writable here —
+        email/phone/role changes are out of scope for this endpoint.
+      properties:
+        is_active:
+          type: boolean
+        profile:
+          $ref: '#/components/schemas/UserProfileRequest'
+    PatchedBidRequest:
+      type: object
+      properties:
+        listing:
+          type: integer
+        offered_price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        offered_quantity:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        status:
+          $ref: '#/components/schemas/BidStatusEnum'
+        message:
+          type: string
+    PatchedDisputeRequest:
+      type: object
+      properties:
+        order:
+          type: integer
+        against:
+          type: integer
+        type:
+          $ref: '#/components/schemas/DisputeTypeEnum'
+        status:
+          $ref: '#/components/schemas/DisputeStatusEnum'
+        description:
+          type: string
+        evidence_refs: {}
+        resolution_notes:
+          type: string
+    PatchedListingRequest:
+      type: object
+      properties:
+        client_uuid:
+          type: string
+          format: uuid
+        vertical:
+          type: integer
+        commodity_name:
+          type: string
+          minLength: 1
+          maxLength: 150
+        sub_category:
+          type: string
+          maxLength: 150
+        quantity:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        unit:
+          type: string
+          minLength: 1
+          maxLength: 30
+        price_suggested:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          nullable: true
+        price_final:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          nullable: true
+        location_lat:
+          type: number
+          format: double
+          nullable: true
+        location_lng:
+          type: number
+          format: double
+          nullable: true
+        region:
+          type: string
+          maxLength: 150
+    PatchedMeUpdateRequest:
+      type: object
+      description: |-
+        PATCH /api/auth/me/ — a user editing their own account. Email and role
+        are deliberately not editable here (role changes would be a privilege
+        escalation; email is the login identity).
+      properties:
+        phone:
+          type: string
+          maxLength: 20
+        profile:
+          $ref: '#/components/schemas/UserProfileRequest'
+    PatchedRequirementRequest:
+      type: object
+      properties:
+        vertical:
+          type: integer
+        commodity:
+          type: string
+          minLength: 1
+          maxLength: 150
+        quantity:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        min_grade:
+          type: string
+          maxLength: 30
+        max_price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          nullable: true
+        budget:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          nullable: true
+        region:
+          type: string
+          maxLength: 150
+        region_lat:
+          type: number
+          format: double
+          nullable: true
+        region_lng:
+          type: number
+          format: double
+          nullable: true
+        search_radius_km:
+          type: number
+          format: double
+    PatchedVerticalRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        slug:
+          type: string
+          minLength: 1
+          maxLength: 100
+          pattern: ^[-a-zA-Z0-9_]+$
+        unit_of_measure:
+          type: string
+          minLength: 1
+          maxLength: 30
+        is_active:
+          type: boolean
+    PlatformEnum:
+      enum:
+      - ANDROID
+      - IOS
+      - WEB
+      type: string
+      description: |-
+        * `ANDROID` - Android
+        * `IOS` - iOS
+        * `WEB` - Web
+    PlatformStats:
+      type: object
+      properties:
+        total_listings:
+          type: integer
+        total_orders:
+          type: integer
+        total_users:
+          type: integer
+        revenue:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,14}(?:\.\d{0,2})?$
+        revenue_delta_pct:
+          type: number
+          format: double
+          nullable: true
+      required:
+      - revenue
+      - revenue_delta_pct
+      - total_listings
+      - total_orders
+      - total_users
+    PricePoint:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        vertical:
+          type: integer
+        commodity:
+          type: string
+          maxLength: 150
+        region:
+          type: string
+          maxLength: 150
+        price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        source:
+          $ref: '#/components/schemas/SourceEnum'
+        timestamp:
+          type: string
+          format: date-time
+        raw_data: {}
+      required:
+      - commodity
+      - id
+      - price
+      - region
+      - source
+      - timestamp
+      - vertical
+    PricePointRequest:
+      type: object
+      properties:
+        vertical:
+          type: integer
+        commodity:
+          type: string
+          minLength: 1
+          maxLength: 150
+        region:
+          type: string
+          minLength: 1
+          maxLength: 150
+        price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        source:
+          $ref: '#/components/schemas/SourceEnum'
+        timestamp:
+          type: string
+          format: date-time
+        raw_data: {}
+      required:
+      - commodity
+      - price
+      - region
+      - source
+      - timestamp
+      - vertical
+    PricingRule:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        vertical:
+          type: integer
+          readOnly: true
+        rules: {}
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - id
+      - updated_at
+      - vertical
+    PricingRuleRequest:
+      type: object
+      properties:
+        rules: {}
+    PriorityEnum:
+      enum:
+      - HIGH
+      - MEDIUM
+      - LOW
+      type: string
+      description: |-
+        * `HIGH` - HIGH
+        * `MEDIUM` - MEDIUM
+        * `LOW` - LOW
+    Register:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        phone:
+          type: string
+          maxLength: 20
+        role:
+          $ref: '#/components/schemas/RoleEnum'
+      required:
+      - email
+    RegisterRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          minLength: 1
+          maxLength: 254
+        phone:
+          type: string
+          maxLength: 20
+        password:
+          type: string
+          writeOnly: true
+          minLength: 8
+        role:
+          $ref: '#/components/schemas/RoleEnum'
+        display_name:
+          type: string
+          writeOnly: true
+      required:
+      - email
+      - password
+    ReputationScore:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        user:
+          type: integer
+          readOnly: true
+        role:
+          type: string
+          readOnly: true
+        score:
+          type: number
+          format: double
+          readOnly: true
+        grade_accuracy_score:
+          type: number
+          format: double
+          readOnly: true
+        fulfillment_score:
+          type: number
+          format: double
+          readOnly: true
+        payment_score:
+          type: number
+          format: double
+          readOnly: true
+        total_transactions:
+          type: integer
+          readOnly: true
+        last_updated:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - fulfillment_score
+      - grade_accuracy_score
+      - id
+      - last_updated
+      - payment_score
+      - role
+      - score
+      - total_transactions
+      - user
+    Requirement:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        buyer:
+          type: integer
+          readOnly: true
+        vertical:
+          type: integer
+        commodity:
+          type: string
+          maxLength: 150
+        quantity:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        min_grade:
+          type: string
+          maxLength: 30
+        max_price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          nullable: true
+        budget:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          nullable: true
+        region:
+          type: string
+          maxLength: 150
+        region_lat:
+          type: number
+          format: double
+          nullable: true
+        region_lng:
+          type: number
+          format: double
+          nullable: true
+        search_radius_km:
+          type: number
+          format: double
+        status:
+          allOf:
+          - $ref: '#/components/schemas/RequirementStatusEnum'
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - buyer
+      - commodity
+      - created_at
+      - id
+      - quantity
+      - status
+      - vertical
+    RequirementRequest:
+      type: object
+      properties:
+        vertical:
+          type: integer
+        commodity:
+          type: string
+          minLength: 1
+          maxLength: 150
+        quantity:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        min_grade:
+          type: string
+          maxLength: 30
+        max_price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          nullable: true
+        budget:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          nullable: true
+        region:
+          type: string
+          maxLength: 150
+        region_lat:
+          type: number
+          format: double
+          nullable: true
+        region_lng:
+          type: number
+          format: double
+          nullable: true
+        search_radius_km:
+          type: number
+          format: double
+      required:
+      - commodity
+      - quantity
+      - vertical
+    RequirementStatusEnum:
+      enum:
+      - OPEN
+      - MATCHED
+      - FULFILLED
+      - CANCELLED
+      type: string
+      description: |-
+        * `OPEN` - Open
+        * `MATCHED` - Matched
+        * `FULFILLED` - Fulfilled
+        * `CANCELLED` - Cancelled
+    RoleEnum:
+      enum:
+      - SELLER
+      - BUYER
+      - ADMIN
+      - VERIFIER
+      type: string
+      description: |-
+        * `SELLER` - Seller
+        * `BUYER` - Buyer
+        * `ADMIN` - Admin
+        * `VERIFIER` - Verifier
+    SourceEnum:
+      enum:
+      - AGMARKNET
+      - ADMIN_ENTERED
+      - CCI
+      type: string
+      description: |-
+        * `AGMARKNET` - AGMARKNET
+        * `ADMIN_ENTERED` - Admin Entered
+        * `CCI` - CCI
+    TokenRefresh:
+      type: object
+      properties:
+        access:
+          type: string
+          readOnly: true
+        refresh:
+          type: string
+      required:
+      - access
+      - refresh
+    TokenRefreshRequest:
+      type: object
+      properties:
+        refresh:
+          type: string
+          minLength: 1
+      required:
+      - refresh
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        phone:
+          type: string
+          maxLength: 20
+        role:
+          $ref: '#/components/schemas/RoleEnum'
+        is_active:
+          type: boolean
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        profile:
+          $ref: '#/components/schemas/UserProfile'
+      required:
+      - created_at
+      - email
+      - id
+      - is_active
+    UserProfile:
+      type: object
+      properties:
+        display_name:
+          type: string
+          maxLength: 150
+        avatar_url:
+          oneOf:
+          - type: string
+            format: uri
+            maxLength: 200
+          - type: string
+            maxLength: 0
+        preferred_language:
+          type: string
+          maxLength: 10
+        location_lat:
+          type: number
+          format: double
+          nullable: true
+        location_lng:
+          type: number
+          format: double
+          nullable: true
+    UserProfileRequest:
+      type: object
+      properties:
+        display_name:
+          type: string
+          maxLength: 150
+        avatar_url:
+          oneOf:
+          - type: string
+            format: uri
+            maxLength: 200
+          - type: string
+            maxLength: 0
+        preferred_language:
+          type: string
+          maxLength: 10
+        location_lat:
+          type: number
+          format: double
+          nullable: true
+        location_lng:
+          type: number
+          format: double
+          nullable: true
+    VerificationQueueItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        listing_id:
+          type: integer
+        commodity_name:
+          type: string
+        vertical:
+          type: string
+        seller_name:
+          type: string
+        ai_grade:
+          type: string
+          nullable: true
+        ai_confidence:
+          type: number
+          format: double
+          nullable: true
+        priority:
+          $ref: '#/components/schemas/PriorityEnum'
+        status:
+          type: string
+        evidence_image_count:
+          type: integer
+        flagged_reason:
+          type: string
+        attribute_scores:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+        created_at:
+          type: string
+          format: date-time
+      required:
+      - ai_confidence
+      - ai_grade
+      - attribute_scores
+      - commodity_name
+      - created_at
+      - evidence_image_count
+      - flagged_reason
+      - id
+      - listing_id
+      - priority
+      - seller_name
+      - status
+      - vertical
+    VerificationReviewRequest:
+      type: object
+      properties:
+        decision:
+          $ref: '#/components/schemas/DecisionEnum'
+        notes:
+          type: string
+        attribute_scores:
+          type: object
+          additionalProperties:
+            type: number
+            format: double
+      required:
+      - decision
+    Vertical:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 100
+        slug:
+          type: string
+          maxLength: 100
+          pattern: ^[-a-zA-Z0-9_]+$
+        unit_of_measure:
+          type: string
+          maxLength: 30
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - id
+      - name
+      - slug
+      - unit_of_measure
+    VerticalRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        slug:
+          type: string
+          minLength: 1
+          maxLength: 100
+          pattern: ^[-a-zA-Z0-9_]+$
+        unit_of_measure:
+          type: string
+          minLength: 1
+          maxLength: 30
+        is_active:
+          type: boolean
+      required:
+      - name
+      - slug
+      - unit_of_measure
+  securitySchemes:
+    jwtAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

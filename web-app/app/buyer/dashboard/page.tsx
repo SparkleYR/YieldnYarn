@@ -18,6 +18,7 @@ import {
   type Requirement,
 } from "@/lib/api";
 import { getStoredTokens } from "@/lib/auth";
+import { useI18n } from "@/lib/i18n";
 import { StatTile } from "@/components/shared/stat-tile";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -31,6 +32,7 @@ import {
 } from "@/components/ui/table";
 
 export default function BuyerDashboardPage() {
+  const { t, intlLocale } = useI18n();
   const [requirements, setRequirements] = useState<Requirement[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [listingCount, setListingCount] = useState<number | null>(null);
@@ -41,7 +43,7 @@ export default function BuyerDashboardPage() {
     const token = getStoredTokens()?.access;
     if (!token) {
       if (!isCancelled()) {
-        setError("You must be signed in as a buyer to view the dashboard.");
+        setError(t("dashboard.signIn"));
         setLoading(false);
       }
       return;
@@ -63,12 +65,12 @@ export default function BuyerDashboardPage() {
       }
     } catch (err) {
       if (!isCancelled()) {
-        setError(err instanceof ApiError ? err.message : "Failed to load the dashboard.");
+        setError(err instanceof ApiError ? err.message : t("dashboard.loadFailed"));
       }
     } finally {
       if (!isCancelled()) setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     let cancelled = false;
@@ -99,22 +101,22 @@ export default function BuyerDashboardPage() {
     <div className="flex flex-col gap-6">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatTile
-          label="Open requirements"
+          label={t("dashboard.openRequirements")}
           value={loading ? "…" : String(openRequirements)}
           icon={IconClipboardList}
         />
         <StatTile
-          label="Active orders"
+          label={t("dashboard.activeOrders")}
           value={loading ? "…" : String(activeOrders)}
           icon={IconPackage}
         />
         <StatTile
-          label="Total spend"
-          value={loading ? "…" : `₹${totalSpend.toLocaleString("en-IN")}`}
+          label={t("dashboard.totalSpend")}
+          value={loading ? "…" : `₹${totalSpend.toLocaleString(intlLocale)}`}
           icon={IconWallet}
         />
         <StatTile
-          label="Listings in catalog"
+          label={t("dashboard.listingsInCatalog")}
           value={loading || listingCount === null ? "…" : String(listingCount)}
           icon={IconShoppingBag}
         />
@@ -122,12 +124,12 @@ export default function BuyerDashboardPage() {
 
       <div className="rounded-2xl border border-border-muted bg-surface">
         <div className="flex items-center justify-between border-b border-border-muted p-5">
-          <h2 className="text-sm font-semibold text-heading">Recent orders</h2>
+          <h2 className="text-sm font-semibold text-heading">{t("dashboard.recentOrders")}</h2>
           <Link
             href="/buyer/orders"
             className="text-xs font-medium text-brand-primary-glow hover:underline"
           >
-            View all
+            {t("common.viewAll")}
           </Link>
         </div>
         {loading ? (
@@ -137,15 +139,15 @@ export default function BuyerDashboardPage() {
             ))}
           </div>
         ) : recentOrders.length === 0 ? (
-          <p className="p-5 text-center text-sm text-muted-2">No orders yet.</p>
+          <p className="p-5 text-center text-sm text-muted-2">{t("dashboard.noOrders")}</p>
         ) : (
           <Table>
             <TableHeader>
               <TableRow className="border-border-muted hover:bg-transparent">
-                <TableHead className="pl-5">Order</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Sellers</TableHead>
-                <TableHead className="pr-5 text-right">Total</TableHead>
+                <TableHead className="pl-5">{t("dashboard.order")}</TableHead>
+                <TableHead>{t("common.status")}</TableHead>
+                <TableHead>{t("dashboard.sellers")}</TableHead>
+                <TableHead className="pr-5 text-right">{t("common.total")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -156,10 +158,10 @@ export default function BuyerDashboardPage() {
                     <StatusBadge status={order.status} />
                   </TableCell>
                   <TableCell className="text-body">
-                    {order.allocations.length} seller{order.allocations.length === 1 ? "" : "s"}
+                    {t("dashboard.sellerCount", { count: order.allocations.length })}
                   </TableCell>
                   <TableCell className="pr-5 text-right text-heading">
-                    {order.total_price ? `₹${Number(order.total_price).toLocaleString("en-IN")}` : "—"}
+                    {order.total_price ? `₹${Number(order.total_price).toLocaleString(intlLocale)}` : "—"}
                   </TableCell>
                 </TableRow>
               ))}
@@ -171,18 +173,18 @@ export default function BuyerDashboardPage() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <QuickLink
           href="/buyer/catalog"
-          title="Browse catalog"
-          description="Search active listings across verticals."
+          title={t("dashboard.browse.title")}
+          description={t("dashboard.browse.body")}
         />
         <QuickLink
           href="/buyer/requirements"
-          title="Post a requirement"
-          description="Let the matching engine find sellers for you."
+          title={t("dashboard.post.title")}
+          description={t("dashboard.post.body")}
         />
         <QuickLink
           href="/buyer/estimate"
-          title="Estimate a cost"
-          description="Get a grade-adjusted price before you commit."
+          title={t("dashboard.estimate.title")}
+          description={t("dashboard.estimate.body")}
         />
       </div>
     </div>

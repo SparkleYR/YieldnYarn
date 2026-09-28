@@ -116,3 +116,28 @@ def test_attributes_without_a_model_fall_back_per_attribute(trained_models_dir, 
     assert set(result["attribute_scores"]) == {"foreign_matter", "discoloration"}
     # overall confidence is the least certain attribute's
     assert result["overall_confidence"] <= 1.0
+
+
+def test_evidence_missing_locally_is_downloaded_from_blob_storage(tmp_path, monkeypatch):
+    import httpx
+
+    from grading.router import local_evidence
+
+    monkeypatch.setattr(db_module.settings, "DJANGO_MEDIA_ROOT", str(tmp_path / "empty-media"))
+    monkeypatch.setattr(db_module.settings, "EVIDENCE_BASE_URL", "https://acct.blob.core.windows.net/media")
+    monkeypatch.setattr(db_module.settings, "EVIDENCE_URL_QUERY", "sv=2024&sig=abc")
+    requested = []
+
+    def fake_get(url, timeout):
+        requested.append(url)
+        if "missing" in url:
+            return httpx.Response(404, request=httpx.Request("GET", url))
+        return httpx.Response(200, content=b"jpeg-bytes", request=httpx.Request("GET", url))
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    with local_evidence(["grading_evidence/listing_1/a.jpg", "grading_evidence/listing_1/missing.jpg"]) as paths:
+        assert len(paths) == 1
+        assert Path(paths[0]).read_bytes() == b"jpeg-bytes"
+        downloaded_dir = Path(paths[0]).parent
+    assert requested[0] == "https://acct.blob.core.windows.net/media/grading_evidence/listing_1/a.jpg?sv=2024&sig=abc"
+    assert not downloaded_dir.exists()  # temp files are cleaned up after grading

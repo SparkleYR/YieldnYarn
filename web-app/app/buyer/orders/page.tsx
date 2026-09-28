@@ -6,10 +6,12 @@ import { IconChevronDown } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
 import { ApiError, listOrders, type Order } from "@/lib/api";
 import { getStoredTokens } from "@/lib/auth";
+import { useI18n } from "@/lib/i18n";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function OrdersPage() {
+  const { t, intlLocale } = useI18n();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -19,7 +21,7 @@ export default function OrdersPage() {
     const token = getStoredTokens()?.access;
     if (!token) {
       if (!isCancelled()) {
-        setError("You must be signed in as a buyer to view orders.");
+        setError(t("orders.signIn"));
         setLoading(false);
       }
       return;
@@ -33,12 +35,12 @@ export default function OrdersPage() {
       if (!isCancelled()) setOrders(res.results);
     } catch (err) {
       if (!isCancelled()) {
-        setError(err instanceof ApiError ? err.message : "Failed to load orders.");
+        setError(err instanceof ApiError ? err.message : t("orders.loadFailed"));
       }
     } finally {
       if (!isCancelled()) setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     let cancelled = false;
@@ -61,9 +63,9 @@ export default function OrdersPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-lg font-semibold text-heading">My orders</h1>
+        <h1 className="text-lg font-semibold text-heading">{t("orders.title")}</h1>
         <p className="mt-1 text-sm text-body">
-          Orders can span multiple sellers — expand one to see the allocation.
+          {t("orders.subtitle")}
         </p>
       </div>
 
@@ -77,7 +79,7 @@ export default function OrdersPage() {
 
       {!loading && orders.length === 0 && (
         <p className="rounded-2xl border border-dashed border-border-muted p-12 text-center text-sm text-body">
-          No orders yet.
+          {t("orders.empty")}
         </p>
       )}
 
@@ -97,22 +99,22 @@ export default function OrdersPage() {
                   aria-expanded={isOpen}
                 >
                   <div className="flex items-center gap-4">
-                    <span className="font-medium text-heading">Order #{order.id}</span>
+                    <span className="font-medium text-heading">{t("dashboard.order")} #{order.id}</span>
                     <StatusBadge status={order.status} />
                     {order.requirement && (
                       <span className="text-xs text-muted-2">
-                        from requirement #{order.requirement}
+                        {t("orders.fromRequirement", { id: order.requirement })}
                       </span>
                     )}
                   </div>
                   <div className="flex items-center gap-4">
                     <span className="text-sm font-semibold text-heading">
                       {order.total_price
-                        ? `₹${Number(order.total_price).toLocaleString("en-IN")}`
+                        ? `₹${Number(order.total_price).toLocaleString(intlLocale)}`
                         : "—"}
                     </span>
                     <span className="text-xs text-muted-2">
-                      {new Date(order.created_at).toLocaleDateString("en-IN", {
+                      {new Date(order.created_at).toLocaleDateString(intlLocale, {
                         day: "2-digit",
                         month: "short",
                       })}
@@ -130,7 +132,7 @@ export default function OrdersPage() {
                 {isOpen && (
                   <div className="border-t border-border-muted px-5 py-4">
                     <p className="text-xs font-medium tracking-wide text-muted-2 uppercase">
-                      Allocation
+                      {t("orders.allocation")}
                     </p>
                     <ul className="mt-3 flex flex-col divide-y divide-border-muted">
                       {order.allocations.map((alloc) => (
@@ -147,14 +149,14 @@ export default function OrdersPage() {
                               {alloc.allocated_quantity} {alloc.unit}
                             </p>
                             <p className="text-xs text-muted-2">
-                              ₹{Number(alloc.unit_price).toLocaleString("en-IN")} / {alloc.unit}
+                              ₹{Number(alloc.unit_price).toLocaleString(intlLocale)} / {alloc.unit}
                             </p>
                           </div>
                         </li>
                       ))}
                       {order.allocations.length === 0 && (
                         <li className="py-4 text-center text-xs text-muted-2">
-                          Not yet allocated to any seller.
+                          {t("orders.notAllocated")}
                         </li>
                       )}
                     </ul>

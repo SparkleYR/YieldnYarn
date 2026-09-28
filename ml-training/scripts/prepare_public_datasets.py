@@ -50,17 +50,15 @@ WHEAT_CLASSES = {
 }
 
 
-
 def is_green_sheet(crop) -> bool:
     """AgroAI photos were taken on a green sheet, and some "foreign_particles"
     crops are just pieces of it. Wheat, chaff, stones and seeds are never
     mostly strongly green, so these are dropped as label noise."""
-    import numpy as np
-
     px = crop.reshape(-1, 3).astype(int)
     px = px[px.sum(1) > 0]
     green = (px[:, 1] > px[:, 0] + 20) & (px[:, 1] > px[:, 2] + 20)
     return len(px) > 0 and green.mean() > 0.5
+
 
 FABRIC_CLASSES = {0: "1_hole", 1: "2_objects", 2: "3_oil_spot", 3: "4_thread_error"}
 GOOD = "0_good"

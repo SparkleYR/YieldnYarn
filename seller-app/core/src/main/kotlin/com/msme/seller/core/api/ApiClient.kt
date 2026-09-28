@@ -57,7 +57,7 @@ object ApiClient {
         .build()
 }
 
-private val PUBLIC_PATHS = listOf("auth/login/", "auth/register/", "auth/refresh/")
+private val PUBLIC_PATHS = listOf("auth/login/", "auth/register/", "auth/refresh/", "auth/logout/")
 
 private fun Request.isPublic() = PUBLIC_PATHS.any { url.encodedPath.endsWith(it) }
 

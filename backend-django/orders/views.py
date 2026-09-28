@@ -27,6 +27,8 @@ class RequirementViewSet(viewsets.ModelViewSet):
     search_fields = ["commodity"]
 
     def get_queryset(self):
+        if getattr(self, "swagger_fake_view", False):  # OpenAPI schema generation
+            return Requirement.objects.none()
         user = self.request.user
         qs = Requirement.objects.select_related("buyer", "vertical").all()
         if user.is_superuser or user.role == "ADMIN":
@@ -104,6 +106,8 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
     filterset_fields = ["status"]
 
     def get_queryset(self):
+        if getattr(self, "swagger_fake_view", False):  # OpenAPI schema generation
+            return Order.objects.none()
         user = self.request.user
         qs = Order.objects.select_related("buyer", "requirement").prefetch_related(
             "allocations__listing__seller__profile"
@@ -129,6 +133,8 @@ class BidViewSet(viewsets.ModelViewSet):
     filterset_fields = ["listing", "status"]
 
     def get_queryset(self):
+        if getattr(self, "swagger_fake_view", False):  # OpenAPI schema generation
+            return Bid.objects.none()
         user = self.request.user
         qs = Bid.objects.select_related("listing", "buyer", "buyer__profile").all()
         if user.is_superuser or user.role == "ADMIN":

@@ -100,20 +100,47 @@ def eval_transform(image_size: int = IMAGE_SIZE, grayscale: bool = False):
     return transforms.Compose(steps)
 
 
-def train_transform(image_size: int = IMAGE_SIZE, grayscale: bool = False):
-    """Geometric augmentation plus colour jitter. The hue/saturation jitter is
-    deliberately small but not zero: phone cameras' white balance varies a lot
-    between photos (the wheat data has whole photos with a blue cast), and a
-    model that keys on exact colour fails on the next phone."""
+class _RandomQuarterTurn:
+    """Rotate by 0/90/180/270 degrees: lossless, unlike free rotation, which
+    leaves black corners in a texture patch."""
+
+    def __call__(self, img):
+        import random
+
+        return img.rotate(random.choice((0, 90, 180, 270)))
+
+
+def train_transform(image_size: int = IMAGE_SIZE, grayscale: bool = False, mode: str = "kernels"):
+    """Augmentation per analysis mode.
+
+    * kernels/image: random crop + free rotation (a kernel has no preferred
+      orientation) and colour jitter. The hue/saturation jitter is small but
+      not zero: phone cameras' white balance varies a lot between photos (the
+      wheat data has whole photos with a blue cast); the random greyscale
+      copies keep colour a helpful cue rather than a crutch.
+    * patches: flips and quarter turns only, no cropping: a defect can be a
+      few pixels at the edge of a patch, and a crop that cuts it out would
+      leave a "hole" label on a patch with no hole.
+    """
     from torchvision import transforms
 
-    steps = [
-        transforms.RandomResizedCrop(image_size, scale=(0.75, 1.0), ratio=(0.8, 1.25)),
-        transforms.RandomHorizontalFlip(),
-        transforms.RandomVerticalFlip(),
-        transforms.RandomRotation(90),
-        transforms.ColorJitter(brightness=0.25, contrast=0.25, saturation=0.3, hue=0.05),
-    ]
+    if mode == "patches":
+        steps = [
+            transforms.Resize((image_size, image_size)),
+            transforms.RandomHorizontalFlip(),
+            transforms.RandomVerticalFlip(),
+            _RandomQuarterTurn(),
+            transforms.ColorJitter(brightness=0.2, contrast=0.2),
+        ]
+    else:
+        steps = [
+            transforms.RandomResizedCrop(image_size, scale=(0.75, 1.0), ratio=(0.8, 1.25)),
+            transforms.RandomHorizontalFlip(),
+            transforms.RandomVerticalFlip(),
+            transforms.RandomRotation(90),
+            transforms.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.4, hue=0.08),
+            transforms.RandomGrayscale(p=0.25),
+        ]
     if grayscale:
         steps.append(transforms.Grayscale(num_output_channels=3))
     steps += [transforms.ToTensor(), transforms.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD)]

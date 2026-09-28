@@ -31,10 +31,10 @@ class DisputeSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["id", "raised_by", "created_at", "resolved_at"]
 
-    def get_raised_by_name(self, dispute):
+    def get_raised_by_name(self, dispute) -> str:
         return _display_name(dispute.raised_by)
 
-    def get_against_name(self, dispute):
+    def get_against_name(self, dispute) -> str:
         return _display_name(dispute.against)
 
     def create(self, validated_data):

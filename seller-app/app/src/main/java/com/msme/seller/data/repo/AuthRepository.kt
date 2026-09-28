@@ -4,6 +4,7 @@ import com.msme.seller.core.api.ApiResult
 import com.msme.seller.core.api.SellerApi
 import com.msme.seller.core.api.apiCall
 import com.msme.seller.core.model.LoginRequest
+import com.msme.seller.core.model.RefreshRequest
 import com.msme.seller.core.model.RegisterRequest
 import com.msme.seller.core.model.Role
 import com.msme.seller.data.EvidenceFiles
@@ -75,6 +76,8 @@ class AuthRepository @Inject constructor(
 
     suspend fun logout() {
         pushRegistrar.unregister()
+        // Revoke the refresh token so it can't be reused if it was copied off the device.
+        session.refreshToken?.let { apiCall { api.logout(RefreshRequest(it)) } }
         syncScheduler.cancelAll()
         withContext(Dispatchers.IO) {
             db.clearAllTables()

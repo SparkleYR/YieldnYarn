@@ -58,7 +58,7 @@ class ListingSerializer(serializers.ModelSerializer):
         validated_data.pop("client_uuid", None)
         return super().update(instance, validated_data)
 
-    def get_seller_name(self, listing):
+    def get_seller_name(self, listing) -> str:
         return _display_name(listing.seller)
 
     def _latest_grade(self, listing):
@@ -78,11 +78,11 @@ class ListingSerializer(serializers.ModelSerializer):
         listing._derived_grade = result
         return result
 
-    def get_grade(self, listing):
+    def get_grade(self, listing) -> str | None:
         grade, _confidence = self._latest_grade(listing)
         return grade
 
-    def get_grade_confidence(self, listing):
+    def get_grade_confidence(self, listing) -> float | None:
         _grade, confidence = self._latest_grade(listing)
         return confidence
 

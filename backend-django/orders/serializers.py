@@ -58,7 +58,7 @@ class OrderAllocationSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["id"]
 
-    def get_seller_name(self, allocation):
+    def get_seller_name(self, allocation) -> str:
         return _display_name(allocation.listing.seller)
 
 
@@ -115,10 +115,10 @@ class BidSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["id", "buyer", "proposed_by", "parent_bid", "created_at"]
 
-    def get_buyer_name(self, bid):
+    def get_buyer_name(self, bid) -> str:
         return _display_name(bid.buyer)
 
-    def get_awaiting_response_from(self, bid):
+    def get_awaiting_response_from(self, bid) -> str | None:
         if bid.status != Bid.Status.PENDING:
             return None
         return "SELLER" if bid.responder_id == bid.listing.seller_id else "BUYER"

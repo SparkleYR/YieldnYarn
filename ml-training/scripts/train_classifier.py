@@ -104,9 +104,9 @@ def evaluate(model: nn.Module, loader: DataLoader, device: torch.device, num_cla
     }
 
 
-def load_data(args, image_size: int):
+def load_data(args, image_size: int, mode: str):
     data_dir = Path(args.data_dir or ML_ROOT / "data" / args.vertical / args.attribute)
-    train_tf = grading_model.train_transform(image_size, args.grayscale)
+    train_tf = grading_model.train_transform(image_size, args.grayscale, mode)
     eval_tf = grading_model.eval_transform(image_size, args.grayscale)
     if (data_dir / "train").is_dir() and (data_dir / "val").is_dir():
         train_set = datasets.ImageFolder(data_dir / "train", transform=train_tf)
@@ -138,7 +138,8 @@ def train(args: argparse.Namespace) -> Path:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     torch.manual_seed(args.seed)
 
-    classes, train_set, train_targets, val_set = load_data(args, args.image_size)
+    mode = (analysis or {}).get("mode", "image")
+    classes, train_set, train_targets, val_set = load_data(args, args.image_size, mode)
     if len(classes) < 2:
         raise SystemExit(f"Need at least 2 classes, found {classes}")
     class_scores = parse_class_scores(args.class_scores, classes)

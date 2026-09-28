@@ -125,3 +125,11 @@ class PricingRuleDetailViewTest(APITestCase):
         response = self.client.put(self.url, {"rules": {}}, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+
+class MissingVerticalTest(APITestCase):
+    def test_schema_and_rules_for_an_unknown_vertical_are_404_not_500(self):
+        admin = User.objects.create_superuser(email="cfg-admin@example.com", password="pw12345")
+        self.client.force_authenticate(user=admin)
+        self.assertEqual(self.client.get("/api/config/verticals/999999/grading-schema/").status_code, 404)
+        self.assertEqual(self.client.get("/api/config/verticals/999999/pricing-rules/").status_code, 404)

@@ -1,7 +1,8 @@
 import httpx
 from django.conf import settings
 from django.core.exceptions import ValidationError as DjangoValidationError
-from rest_framework import parsers, status, viewsets
+from drf_spectacular.utils import extend_schema, inline_serializer
+from rest_framework import parsers, serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -193,6 +194,27 @@ def _flagged_reason(confidence):
     )
 
 
+@extend_schema(
+    responses=inline_serializer(
+        "VerificationQueueItem",
+        {
+            "id": serializers.IntegerField(),
+            "listing_id": serializers.IntegerField(),
+            "commodity_name": serializers.CharField(),
+            "vertical": serializers.CharField(),
+            "seller_name": serializers.CharField(),
+            "ai_grade": serializers.CharField(allow_null=True),
+            "ai_confidence": serializers.FloatField(allow_null=True),
+            "priority": serializers.ChoiceField(["HIGH", "MEDIUM", "LOW"]),
+            "status": serializers.CharField(),
+            "evidence_image_count": serializers.IntegerField(),
+            "flagged_reason": serializers.CharField(),
+            "attribute_scores": serializers.ListField(child=serializers.DictField()),
+            "created_at": serializers.DateTimeField(),
+        },
+        many=True,
+    )
+)
 class VerificationQueueView(APIView):
     """GET /api/verification/queue/  (Verifier + Admin only)
 
@@ -265,6 +287,17 @@ class VerificationQueueView(APIView):
         return Response(items)
 
 
+@extend_schema(
+    request=inline_serializer(
+        "VerificationReview",
+        {
+            "decision": serializers.ChoiceField(["APPROVE", "REJECT"]),
+            "notes": serializers.CharField(required=False, allow_blank=True),
+            "attribute_scores": serializers.DictField(child=serializers.FloatField(), required=False),
+        },
+    ),
+    responses=ListingSerializer,
+)
 class VerificationReviewView(APIView):
     """POST /api/verification/queue/{listing_id}/review/
 

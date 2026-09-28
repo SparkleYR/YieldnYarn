@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { IconHome2, IconLogout } from "@tabler/icons-react";
 
-import { clearSession } from "@/lib/auth";
+import { logout as endSession } from "@/lib/auth";
+import { useT } from "@/lib/i18n";
 import type { DashboardNavItem } from "@/components/shared/dashboard-nav-items";
 import {
   CommandDialog,
@@ -21,6 +22,7 @@ import {
 export function CommandPalette({ navItems }: { navItems: DashboardNavItem[] }) {
   const [open, setOpen] = useState(false);
   const router = useRouter();
+  const t = useT();
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -40,42 +42,44 @@ export function CommandPalette({ navItems }: { navItems: DashboardNavItem[] }) {
 
   function logout() {
     setOpen(false);
-    clearSession();
-    router.push("/login");
+    void endSession().then(() => router.push("/login"));
   }
 
   return (
     <CommandDialog
       open={open}
       onOpenChange={setOpen}
-      title="Command palette"
-      description="Jump to a page or run an action"
+      title={t("palette.title")}
+      description={t("palette.description")}
     >
-      <CommandInput placeholder="Type a page name or command…" />
+      <CommandInput placeholder={t("palette.placeholder")} />
       <CommandList>
-        <CommandEmpty>No results found.</CommandEmpty>
-        <CommandGroup heading="Pages">
-          {navItems.map((item) => (
-            <CommandItem key={item.href} value={item.label} onSelect={() => go(item.href)}>
-              <item.icon />
-              {item.label}
-            </CommandItem>
-          ))}
-          <CommandItem value="Marketing site home" onSelect={() => go("/")}>
+        <CommandEmpty>{t("palette.empty")}</CommandEmpty>
+        <CommandGroup heading={t("palette.pages")}>
+          {navItems.map((item) => {
+            const label = item.labelKey ? t(item.labelKey) : item.label;
+            return (
+              <CommandItem key={item.href} value={label} onSelect={() => go(item.href)}>
+                <item.icon />
+                {label}
+              </CommandItem>
+            );
+          })}
+          <CommandItem value={t("palette.home")} onSelect={() => go("/")}>
             <IconHome2 />
-            Marketing site home
+            {t("palette.home")}
           </CommandItem>
         </CommandGroup>
         <CommandSeparator />
-        <CommandGroup heading="Account">
-          <CommandItem value="Log out" onSelect={logout}>
+        <CommandGroup heading={t("palette.actions")}>
+          <CommandItem value={t("palette.logout")} onSelect={logout}>
             <IconLogout />
-            Log out
+            {t("palette.logout")}
           </CommandItem>
         </CommandGroup>
       </CommandList>
       <div className="flex items-center justify-end gap-1 border-t border-border-muted px-3 py-2 text-xs text-muted-2">
-        <span>Toggle with</span>
+        <span>{t("palette.toggleWith")}</span>
         <CommandShortcut className="ml-0 rounded border border-border-muted px-1.5 py-0.5 font-mono">
           ⌘K
         </CommandShortcut>

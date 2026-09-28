@@ -12,6 +12,7 @@ import {
   type Bid,
 } from "@/lib/api";
 import { getStoredTokens } from "@/lib/auth";
+import { useI18n, type MessageKey } from "@/lib/i18n";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,10 +20,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 type Tab = "needs-you" | "waiting" | "closed";
 
-const TABS: { id: Tab; label: string }[] = [
-  { id: "needs-you", label: "Needs your reply" },
-  { id: "waiting", label: "Waiting on seller" },
-  { id: "closed", label: "Closed" },
+const TABS: { id: Tab; label: MessageKey }[] = [
+  { id: "needs-you", label: "offers.tab.needsYou" },
+  { id: "waiting", label: "offers.tab.waiting" },
+  { id: "closed", label: "offers.tab.closed" },
 ];
 
 function inTab(bid: Bid, tab: Tab) {
@@ -31,13 +32,14 @@ function inTab(bid: Bid, tab: Tab) {
   return bid.status === "PENDING" && bid.awaiting_response_from === "SELLER";
 }
 
-function rupees(value: string | number) {
-  return `₹${Number(value).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
+function rupees(value: string | number, locale = "en-IN") {
+  return `₹${Number(value).toLocaleString(locale, { maximumFractionDigits: 2 })}`;
 }
 
 /** A buyer's bids and the sellers' counter-offers on them. Sellers counter
  * from the Android app; the buyer settles (or counters back) here. */
 export default function OffersPage() {
+  const { t, intlLocale } = useI18n();
   const [bids, setBids] = useState<Bid[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -49,7 +51,7 @@ export default function OffersPage() {
     const token = getStoredTokens()?.access;
     if (!token) {
       if (!isCancelled()) {
-        setError("You must be signed in as a buyer to view your offers.");
+        setError(t("offers.signIn"));
         setLoading(false);
       }
       return;
@@ -66,11 +68,11 @@ export default function OffersPage() {
         setError(null);
       }
     } catch (err) {
-      if (!isCancelled()) setError(err instanceof ApiError ? err.message : "Failed to load offers.");
+      if (!isCancelled()) setError(err instanceof ApiError ? err.message : t("offers.loadFailed"));
     } finally {
       if (!isCancelled()) setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     let cancelled = false;
@@ -83,7 +85,11 @@ export default function OffersPage() {
   }, [load]);
 
   const counts = useMemo(
-    () => Object.fromEntries(TABS.map((t) => [t.id, bids.filter((b) => inTab(b, t.id)).length])) as Record<Tab, number>,
+    () =>
+      Object.fromEntries(TABS.map((option) => [option.id, bids.filter((b) => inTab(b, option.id)).length])) as Record<
+        Tab,
+        number
+      >,
     [bids]
   );
   const visible = bids.filter((b) => inTab(b, tab));
@@ -96,7 +102,7 @@ export default function OffersPage() {
       setCounteringId(null);
       await load();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Something went wrong.");
+      toast.error(err instanceof ApiError ? err.message : t("common.somethingWrong"));
     } finally {
       setBusyId(null);
     }
@@ -119,29 +125,29 @@ export default function OffersPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-lg font-semibold text-heading">My offers</h1>
+        <h1 className="text-lg font-semibold text-heading">{t("offers.title")}</h1>
         <p className="mt-1 text-sm text-body">
-          Your bids, and any counter-offers sellers have made. Accepting a counter-offer creates the order.
+          {t("offers.subtitle")}
         </p>
       </div>
 
       <div className="flex gap-2" role="tablist">
-        {TABS.map((t) => (
+        {TABS.map((option) => (
           <button
-            key={t.id}
+            key={option.id}
             type="button"
             role="tab"
-            aria-selected={tab === t.id}
-            onClick={() => setTab(t.id)}
+            aria-selected={tab === option.id}
+            onClick={() => setTab(option.id)}
             className={cn(
               "rounded-full border px-3.5 py-1.5 text-sm transition-colors",
-              tab === t.id
+              tab === option.id
                 ? "border-heading bg-heading text-surface"
                 : "border-border-muted text-body hover:text-heading"
             )}
           >
-            {t.label}
-            {counts[t.id] > 0 && <span className="ml-1.5 opacity-70">{counts[t.id]}</span>}
+            {t(option.label)}
+            {counts[option.id] > 0 && <span className="ml-1.5 opacity-70">{counts[option.id]}</span>}
           </button>
         ))}
       </div>
@@ -156,7 +162,7 @@ export default function OffersPage() {
 
       {!loading && visible.length === 0 && (
         <p className="rounded-2xl border border-dashed border-border-muted p-12 text-center text-sm text-body">
-          {tab === "needs-you" ? "Nothing needs your reply right now." : "No offers here."}
+          {tab === "needs-you" ? t("offers.emptyNeedsYou") : t("offers.empty")}
         </p>
       )}
 
@@ -172,15 +178,15 @@ export default function OffersPage() {
                   <div>
                     <p className="font-medium text-heading">{bid.commodity_name}</p>
                     <p className="text-xs text-muted-2">
-                      {isCounter ? "Counter-offer from the seller" : "Your offer"}
-                      {bid.parent_bid && !isCounter && " (countering the seller)"}
+                      {isCounter ? t("offers.counterFromSeller") : t("offers.yourOffer")}
+                      {bid.parent_bid && !isCounter && t("offers.counteringSeller")}
                     </p>
                   </div>
                   <StatusBadge status={bid.status} />
                 </div>
                 <p className="mt-3 text-sm text-heading">
-                  {rupees(bid.offered_price)} / {bid.unit} × {Number(bid.offered_quantity)} {bid.unit}
-                  <span className="ml-2 text-muted-2">= {rupees(total)}</span>
+                  {rupees(bid.offered_price, intlLocale)} / {bid.unit} × {Number(bid.offered_quantity)} {bid.unit}
+                  <span className="ml-2 text-muted-2">= {rupees(total, intlLocale)}</span>
                 </p>
                 {bid.message && <p className="mt-1 text-sm text-body">“{bid.message}”</p>}
 
@@ -190,21 +196,21 @@ export default function OffersPage() {
                       size="sm"
                       disabled={busy}
                       onClick={() =>
-                        act(bid, () => withToken((t) => updateBidStatus(bid.id, "ACCEPTED", t)), "Offer accepted — your order has been created.")
+                        act(bid, () => withToken((token) => updateBidStatus(bid.id, "ACCEPTED", token)), t("offers.accepted"))
                       }
                     >
-                      Accept {rupees(total)}
+                      {t("offers.accept", { total: rupees(total, intlLocale) })}
                     </Button>
                     <Button size="sm" variant="outline" disabled={busy} onClick={() => setCounteringId(counteringId === bid.id ? null : bid.id)}>
-                      Counter
+                      {t("offers.counter")}
                     </Button>
                     <Button
                       size="sm"
                       variant="ghost"
                       disabled={busy}
-                      onClick={() => act(bid, () => withToken((t) => updateBidStatus(bid.id, "REJECTED", t)), "Offer rejected.")}
+                      onClick={() => act(bid, () => withToken((token) => updateBidStatus(bid.id, "REJECTED", token)), t("offers.rejected"))}
                     >
-                      Reject
+                      {t("offers.reject")}
                     </Button>
                   </div>
                 )}
@@ -216,8 +222,11 @@ export default function OffersPage() {
                     onSubmit={(price, quantity, message) =>
                       act(
                         bid,
-                        () => withToken((t) => counterBid(bid.id, { offered_price: price, offered_quantity: quantity, message }, t)),
-                        "Counter-offer sent to the seller."
+                        () =>
+                          withToken((token) =>
+                            counterBid(bid.id, { offered_price: price, offered_quantity: quantity, message }, token)
+                          ),
+                        t("offers.countered")
                       )
                     }
                   />
@@ -243,6 +252,7 @@ function CounterForm({
   const [price, setPrice] = useState(String(Number(bid.offered_price)));
   const [quantity, setQuantity] = useState(String(Number(bid.offered_quantity)));
   const [message, setMessage] = useState("");
+  const t = useI18n().t;
   const valid = Number(price) > 0 && Number(quantity) > 0;
 
   return (
@@ -254,20 +264,20 @@ function CounterForm({
       }}
     >
       <label className="flex flex-col gap-1 text-xs text-muted-2">
-        Price per {bid.unit} (₹)
+        {t("offers.pricePer", { unit: bid.unit })}
         <Input type="number" min="0" step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} />
       </label>
       <label className="flex flex-col gap-1 text-xs text-muted-2">
-        Quantity ({bid.unit})
+        {t("offers.quantityIn", { unit: bid.unit })}
         <Input type="number" min="0" step="0.01" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
       </label>
       <label className="flex flex-col gap-1 text-xs text-muted-2">
-        Message (optional)
+        {t("offers.message")}
         <Input value={message} onChange={(e) => setMessage(e.target.value)} />
       </label>
       <div className="sm:col-span-3">
         <Button type="submit" size="sm" disabled={!valid || busy}>
-          Send counter-offer
+          {t("offers.sendCounter")}
         </Button>
       </div>
     </form>

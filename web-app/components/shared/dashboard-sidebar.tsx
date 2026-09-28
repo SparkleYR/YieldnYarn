@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { IconLeaf } from "@tabler/icons-react";
 
+import { useT } from "@/lib/i18n";
 import { SITE_NAME } from "@/lib/constants";
 import type { DashboardNavItem } from "@/components/shared/dashboard-nav-items";
 import {
@@ -19,6 +20,7 @@ import {
 
 export function DashboardSidebar({ items }: { items: DashboardNavItem[] }) {
   const pathname = usePathname();
+  const t = useT();
 
   return (
     <Sidebar collapsible="icon">
@@ -39,12 +41,13 @@ export function DashboardSidebar({ items }: { items: DashboardNavItem[] }) {
               {items.map((item) => {
                 const isActive =
                   pathname === item.href || pathname.startsWith(`${item.href}/`);
+                const label = item.labelKey ? t(item.labelKey) : item.label;
                 return (
                   <SidebarMenuItem key={item.href}>
-                    <SidebarMenuButton asChild isActive={isActive} tooltip={item.label}>
+                    <SidebarMenuButton asChild isActive={isActive} tooltip={label}>
                       <Link href={item.href}>
                         <item.icon />
-                        <span>{item.label}</span>
+                        <span>{label}</span>
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>

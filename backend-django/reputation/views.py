@@ -1,4 +1,5 @@
 from django.contrib.auth import get_user_model
+from drf_spectacular.utils import extend_schema
 from rest_framework import permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -9,6 +10,7 @@ from .serializers import ReputationScoreSerializer
 User = get_user_model()
 
 
+@extend_schema(responses=ReputationScoreSerializer)
 class ReputationDetailView(APIView):
     """GET /api/reputation/{user_id}/"""
 

@@ -9,6 +9,7 @@ import { toast } from "sonner";
 
 import { ApiError, createRequirement, type Requirement, type Vertical } from "@/lib/api";
 import { getStoredTokens } from "@/lib/auth";
+import { useT } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -48,6 +49,7 @@ export function PostRequirementDialog({
   verticals: Vertical[];
   onCreate: (req: Requirement) => void;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const {
     register,
@@ -62,7 +64,7 @@ export function PostRequirementDialog({
   async function onSubmit(values: FormValues) {
     const token = getStoredTokens()?.access;
     if (!token) {
-      toast.error("You must be signed in as a buyer to post a requirement.");
+      toast.error(t("postRequirement.signIn"));
       return;
     }
     try {
@@ -78,11 +80,11 @@ export function PostRequirementDialog({
         token
       );
       onCreate(created);
-      toast.success("Requirement posted.");
+      toast.success(t("postRequirement.posted"));
       reset();
       setOpen(false);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Failed to post the requirement.");
+      toast.error(err instanceof ApiError ? err.message : t("postRequirement.failed"));
     }
   }
 
@@ -91,21 +93,21 @@ export function PostRequirementDialog({
       <DialogTrigger asChild>
         <Button disabled={verticals.length === 0}>
           <IconPlus />
-          Post requirement
+          {t("postRequirement.open")}
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Post a requirement</DialogTitle>
+          <DialogTitle>{t("postRequirement.title")}</DialogTitle>
           <DialogDescription>
-            The matching engine will find sellers meeting these terms.
+            {t("postRequirement.body")}
           </DialogDescription>
         </DialogHeader>
 
         <form id="requirement-form" onSubmit={handleSubmit(onSubmit)}>
           <FieldGroup>
             <Field data-invalid={!!errors.vertical}>
-              <FieldLabel htmlFor="vertical">Vertical</FieldLabel>
+              <FieldLabel htmlFor="vertical">{t("common.vertical")}</FieldLabel>
               <Controller
                 control={control}
                 name="vertical"
@@ -115,7 +117,7 @@ export function PostRequirementDialog({
                     onValueChange={(v) => field.onChange(Number(v))}
                   >
                     <SelectTrigger id="vertical" className="w-full">
-                      <SelectValue placeholder="Select a vertical" />
+                      <SelectValue placeholder={t("common.selectVertical")} />
                     </SelectTrigger>
                     <SelectContent>
                       {verticals.map((v) => (
@@ -131,33 +133,33 @@ export function PostRequirementDialog({
             </Field>
 
             <Field data-invalid={!!errors.commodity}>
-              <FieldLabel htmlFor="commodity">Commodity</FieldLabel>
-              <Input id="commodity" placeholder="Wheat" {...register("commodity")} />
+              <FieldLabel htmlFor="commodity">{t("common.commodity")}</FieldLabel>
+              <Input id="commodity" placeholder={t("postRequirement.commodityPlaceholder")} {...register("commodity")} />
               <FieldError errors={errors.commodity ? [errors.commodity] : undefined} />
             </Field>
 
             <Field data-invalid={!!errors.quantity}>
-              <FieldLabel htmlFor="quantity">Quantity</FieldLabel>
+              <FieldLabel htmlFor="quantity">{t("common.quantity")}</FieldLabel>
               <Input id="quantity" type="number" step="any" {...register("quantity")} />
               <FieldError errors={errors.quantity ? [errors.quantity] : undefined} />
             </Field>
 
             <div className="grid grid-cols-2 gap-3">
               <Field data-invalid={!!errors.min_grade}>
-                <FieldLabel htmlFor="min_grade">Min. grade</FieldLabel>
+                <FieldLabel htmlFor="min_grade">{t("postRequirement.minGrade")}</FieldLabel>
                 <Input id="min_grade" placeholder="Grade A" {...register("min_grade")} />
                 <FieldError errors={errors.min_grade ? [errors.min_grade] : undefined} />
               </Field>
               <Field data-invalid={!!errors.max_price}>
-                <FieldLabel htmlFor="max_price">Max price (₹)</FieldLabel>
+                <FieldLabel htmlFor="max_price">{t("postRequirement.maxPrice")}</FieldLabel>
                 <Input id="max_price" type="number" step="any" {...register("max_price")} />
                 <FieldError errors={errors.max_price ? [errors.max_price] : undefined} />
               </Field>
             </div>
 
             <Field data-invalid={!!errors.region}>
-              <FieldLabel htmlFor="region">Region</FieldLabel>
-              <Input id="region" placeholder="Uttar Pradesh" {...register("region")} />
+              <FieldLabel htmlFor="region">{t("common.region")}</FieldLabel>
+              <Input id="region" placeholder={t("postRequirement.regionPlaceholder")} {...register("region")} />
               <FieldError errors={errors.region ? [errors.region] : undefined} />
             </Field>
           </FieldGroup>
@@ -165,7 +167,7 @@ export function PostRequirementDialog({
 
         <DialogFooter>
           <Button type="submit" form="requirement-form" disabled={isSubmitting}>
-            {isSubmitting ? "Posting…" : "Post requirement"}
+            {isSubmitting ? t("postRequirement.posting") : t("postRequirement.submit")}
           </Button>
         </DialogFooter>
       </DialogContent>

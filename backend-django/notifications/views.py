@@ -1,4 +1,5 @@
-from rest_framework import generics, permissions, status
+from drf_spectacular.utils import OpenApiResponse, extend_schema, inline_serializer
+from rest_framework import generics, permissions, serializers, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -18,9 +19,12 @@ class NotificationListView(generics.ListAPIView):
     filterset_fields = ["type", "is_read"]
 
     def get_queryset(self):
+        if getattr(self, "swagger_fake_view", False):  # OpenAPI schema generation
+            return Notification.objects.none()
         return Notification.objects.filter(user=self.request.user)
 
 
+@extend_schema(request=None, responses=NotificationSerializer)
 class NotificationReadView(APIView):
     """POST /api/notifications/{id}/read/"""
 
@@ -38,6 +42,10 @@ class NotificationReadView(APIView):
         return Response(NotificationSerializer(notification).data)
 
 
+@extend_schema(
+    request=None,
+    responses=inline_serializer("MarkedRead", {"marked_read": serializers.IntegerField()}),
+)
 class NotificationReadAllView(APIView):
     """POST /api/notifications/read-all/"""
 
@@ -50,6 +58,7 @@ class NotificationReadAllView(APIView):
         return Response({"marked_read": updated})
 
 
+@extend_schema(request=DeviceTokenSerializer, responses=DeviceTokenSerializer)
 class DeviceRegisterView(APIView):
     """POST /api/notifications/devices/  {token, platform}
 
@@ -76,6 +85,7 @@ class DeviceRegisterView(APIView):
         )
 
 
+@extend_schema(request=DeviceTokenUnregisterSerializer, responses={204: OpenApiResponse(description="Unregistered")})
 class DeviceUnregisterView(APIView):
     """POST /api/notifications/devices/unregister/  {token}
 

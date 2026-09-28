@@ -6,6 +6,7 @@ Run locally with:
 from __future__ import annotations
 
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -17,8 +18,15 @@ from matching.router import router as matching_router
 from pricing.router import router as pricing_router
 from scheduler.jobs import expire_stale_listings, ingest_agmarknet_prices
 
+from db import settings
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("msme-fastapi")
+
+if settings.SENTRY_DSN:
+    import sentry_sdk
+
+    sentry_sdk.init(dsn=settings.SENTRY_DSN, traces_sample_rate=0.1, send_default_pii=False)
 
 scheduler = AsyncIOScheduler()
 
@@ -59,7 +67,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=[o.strip() for o in os.environ.get("CORS_ALLOWED_ORIGINS", "http://localhost:3000").split(",") if o.strip()],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

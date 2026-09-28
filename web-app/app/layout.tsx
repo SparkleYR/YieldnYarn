@@ -1,12 +1,20 @@
 import type { Metadata } from "next";
-import { Inter, DM_Mono } from "next/font/google";
+import { Inter, DM_Mono, Noto_Sans_Devanagari } from "next/font/google";
 import "./globals.css";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
+import { I18nProvider } from "@/lib/i18n";
 
 const inter = Inter({
   variable: "--font-inter",
   subsets: ["latin"],
+  display: "swap",
+});
+
+// Hindi UI text: Inter has no Devanagari glyphs.
+const devanagari = Noto_Sans_Devanagari({
+  variable: "--font-devanagari",
+  subsets: ["devanagari"],
   display: "swap",
 });
 
@@ -27,13 +35,15 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`${inter.variable} ${dmMono.variable} h-full antialiased dark`}
+      className={`${inter.variable} ${dmMono.variable} ${devanagari.variable} h-full antialiased dark`}
     >
       <body className="min-h-full flex flex-col bg-background text-foreground">
-        <TooltipProvider>
-          {children}
-          <Toaster />
-        </TooltipProvider>
+        <I18nProvider>
+          <TooltipProvider>
+            {children}
+            <Toaster />
+          </TooltipProvider>
+        </I18nProvider>
       </body>
     </html>
   );

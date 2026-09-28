@@ -5,7 +5,9 @@ import { usePathname, useRouter } from "next/navigation";
 import { IconBell, IconLogout, IconUserCircle } from "@tabler/icons-react";
 
 import type { User } from "@/lib/api";
-import { clearSession } from "@/lib/auth";
+import { logout as endSession } from "@/lib/auth";
+import { useT } from "@/lib/i18n";
+import { LanguageSwitcher } from "@/components/shared/language-switcher";
 import type { DashboardNavItem } from "@/components/shared/dashboard-nav-items";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
@@ -27,10 +29,11 @@ function initials(user: User) {
 /** Falls back to the current path's nav item label, or a title-cased last segment. */
 function useSectionTitle(navItems: DashboardNavItem[]) {
   const pathname = usePathname();
+  const t = useT();
   const match = navItems.find(
     (item) => pathname === item.href || pathname.startsWith(`${item.href}/`)
   );
-  if (match) return match.label;
+  if (match) return match.labelKey ? t(match.labelKey) : match.label;
   const last = pathname.split("/").filter(Boolean).pop() ?? "";
   return last.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) || "Dashboard";
 }
@@ -43,13 +46,15 @@ export function DashboardHeader({
   user: User;
 }) {
   const router = useRouter();
+  const t = useT();
   const title = useSectionTitle(navItems);
+  // Only the buyer portal is translated; staff consoles don't get the switch.
+  const translated = navItems.some((item) => item.labelKey);
   const dashboardHref = navItems[0]?.href ?? "/login";
   const notificationsHref = navItems.find((item) => item.href.endsWith("/notifications"))?.href;
 
   function handleLogout() {
-    clearSession();
-    router.push("/login");
+    void endSession().then(() => router.push("/login"));
   }
 
   return (
@@ -59,11 +64,12 @@ export function DashboardHeader({
       <h1 className="text-sm font-medium text-heading">{title}</h1>
 
       <div className="ml-auto flex items-center gap-2">
+        {translated && <LanguageSwitcher className="hidden sm:flex" />}
         {notificationsHref && (
           <Link
             href={notificationsHref}
             className="flex size-8 items-center justify-center rounded-lg text-muted-2 transition-colors hover:bg-muted hover:text-natural-white"
-            aria-label="Notifications"
+            aria-label={t("header.notifications")}
           >
             <IconBell size={17} />
           </Link>
@@ -88,12 +94,12 @@ export function DashboardHeader({
             <DropdownMenuItem asChild>
               <Link href={dashboardHref}>
                 <IconUserCircle />
-                Profile
+                {t("header.profile")}
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem variant="destructive" onSelect={handleLogout}>
               <IconLogout />
-              Log out
+              {t("header.logout")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

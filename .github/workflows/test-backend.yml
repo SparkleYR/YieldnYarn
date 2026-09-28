@@ -6,12 +6,14 @@ on:
       - "backend-django/**"
       - "backend-fastapi/**"
       - "ml-training/scripts/**"
+      - "docs/api/**"
       - ".github/workflows/test-backend.yml"
   pull_request:
     paths:
       - "backend-django/**"
       - "backend-fastapi/**"
       - "ml-training/scripts/**"
+      - "docs/api/**"
       - ".github/workflows/test-backend.yml"
 
 # Both suites run against a real Postgres (the Django schema is the source of
@@ -57,6 +59,14 @@ jobs:
       - name: Check for missing migrations
         working-directory: backend-django
         run: python manage.py makemigrations --check --dry-run
+      - name: OpenAPI schema is valid and up to date
+        working-directory: backend-django
+        run: |
+          python manage.py spectacular --file /tmp/openapi-django.yaml --validate --fail-on-warn
+          diff -u ../docs/api/openapi-django.yaml /tmp/openapi-django.yaml || {
+            echo "::error::docs/api/openapi-django.yaml is stale — run: python manage.py spectacular --file ../docs/api/openapi-django.yaml"
+            exit 1
+          }
       - name: Run tests
         working-directory: backend-django
         run: python manage.py test --parallel 4
@@ -90,6 +100,9 @@ jobs:
       - name: Install dependencies
         working-directory: backend-fastapi
         run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: OpenAPI schema is up to date
+        working-directory: backend-fastapi
+        run: python scripts/export_openapi.py --check
       - name: Run tests
         working-directory: backend-fastapi
         run: pytest
