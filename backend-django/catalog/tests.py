@@ -617,3 +617,35 @@ class OfflineSyncCreateTest(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data), 1)
         self.assertEqual(response.data[0]["file_type"], "IMAGE")
+
+    def test_owner_can_upload_evidence_as_multipart(self):
+        # Regression: the view used to unpack request.data with {**...}, which
+        # turns a multipart QueryDict into lists and rejected every real upload.
+        listing = Listing.objects.create(
+            seller=self.seller, vertical=self.vertical, commodity_name="Rice", quantity=5, unit="quintal"
+        )
+        self.client.force_authenticate(user=self.seller)
+
+        response = self.client.post(
+            f"/api/catalog/listings/{listing.id}/evidence/",
+            {"file": SimpleUploadedFile("grain.jpg", b"jpeg-bytes", content_type="image/jpeg"), "file_type": "IMAGE"},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertEqual(response.data["listing"], listing.id)
+        self.assertEqual(listing.evidence.count(), 1)
+
+    def test_other_seller_cannot_upload_evidence(self):
+        listing = Listing.objects.create(
+            seller=self.seller, vertical=self.vertical, commodity_name="Rice", quantity=5, unit="quintal"
+        )
+        self.client.force_authenticate(user=self.other_seller)
+
+        response = self.client.post(
+            f"/api/catalog/listings/{listing.id}/evidence/",
+            {"file": SimpleUploadedFile("grain.jpg", b"x", content_type="image/jpeg"), "file_type": "IMAGE"},
+            format="multipart",
+        )
+
+        self.assertIn(response.status_code, (status.HTTP_403_FORBIDDEN, status.HTTP_404_NOT_FOUND))

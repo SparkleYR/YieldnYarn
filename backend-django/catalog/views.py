@@ -93,9 +93,11 @@ class ListingViewSet(viewsets.ModelViewSet):
                     listing.evidence.all(), many=True, context={"request": request}
                 ).data
             )
-        serializer = GradingEvidenceSerializer(
-            data={**request.data, "listing": listing.id}
-        )
+        # Pass request.data straight through: unpacking a multipart QueryDict
+        # (`{**request.data}`) yields each field's *list* of values, which
+        # made every real file upload fail validation. `listing` is read-only
+        # on the serializer and set by save() below.
+        serializer = GradingEvidenceSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         serializer.save(listing=listing)
         return Response(serializer.data, status=status.HTTP_201_CREATED)

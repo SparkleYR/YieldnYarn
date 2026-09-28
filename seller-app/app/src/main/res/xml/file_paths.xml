@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Evidence photos live in app-private storage until they're uploaded. -->
+    <files-path name="evidence" path="evidence/" />
+</paths>
