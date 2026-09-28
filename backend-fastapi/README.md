@@ -18,8 +18,10 @@ multi-listing allocation).
 - **`requirements-ml.txt`** — heavy ML inference deps (opencv-python, torch,
   torchvision, ultralytics, numpy) for the real grading pipeline (§9).
   Install this only when you're ready to run actual image-based grading.
-  `grading/pipeline.py` lazy-imports everything in this file and logs a
-  clear `TODO` + falls back gracefully if it's missing.
+  `grading/pipeline.py` / `grading/classifier.py` lazy-import everything in
+  this file and fall back gracefully if it's missing. Trained checkpoints
+  from `ml-training/` are served automatically once present (see
+  `ml-training/README.md` → Serving).
 - **`requirements-dev.txt`** — `pytest`, for running the unit test suite.
 
 ## Setup
@@ -76,9 +78,9 @@ backend-fastapi/
 │   ├── allocation.py      Pure greedy allocation algorithm (§5.3) — no DB deps
 │   └── schemas.py
 ├── scheduler/
+│   ├── agmarknet.py       data.gov.in Agmarknet client + per-state/day aggregation
 │   └── jobs.py            ingest_agmarknet_prices, expire_stale_listings (APScheduler jobs)
-├── tests/
-│   └── test_allocation.py Unit tests for the greedy allocation algorithm
+├── tests/                 pytest suites (allocation, routers, scheduler, Agmarknet, classifier)
 ├── requirements.txt
 ├── requirements-ml.txt
 └── requirements-dev.txt
@@ -91,9 +93,11 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-The test suite currently covers the pure `matching/allocation.py` algorithm
-(exact fulfillment, partial fulfillment, reputation tie-breaking, grade
-filtering, status filtering) with no database required.
+Most suites are integration tests against the live local Postgres
+(`DATABASE_URL`, see `conftest.py`). The Agmarknet tests replace the
+data.gov.in API with `httpx.MockTransport`; the real-inference classifier
+tests build a randomly initialized MobileNetV3 checkpoint and are skipped
+unless `requirements-ml.txt` is installed.
 
 ## Table names
 
@@ -108,23 +112,15 @@ affected model(s) in `db.py` to match.
 
 ## Known simplifications / TODOs
 
-- **Grading** runs synchronously in the request/response cycle for now
-  (no background job queue yet) and uses an OpenCV-feature heuristic proxy
-  instead of trained MobileNetV3/YOLOv8n weights (see `grading/pipeline.py`).
-- **Geospatial matching** — `listings`/`requirements` store location as
-  plain `location_lat`/`location_lng` and `region_lat`/`region_lng` float
-  columns (no PostGIS geometry column, no `geoalchemy2` dependency); this
-  service currently skips radius-based filtering entirely (documented TODO
-  in `matching/router.py`) rather than implementing haversine/`ST_DWithin`
-  filtering, since `requirements` has no explicit search-radius field yet.
-  Relatedly, `pricing/router.py`'s `/adjusted` endpoint looks up the most
-  recent price point for a listing's commodity across *all* regions (rather
-  than the listing's own region), since `listings` has no text region field
-  to join against `price_points.region` — same underlying gap, documented
-  inline.
-- **Listing grade** — the schema doesn't define a single top-level `grade`
-  field on listings; pricing/matching currently treat listings as ungraded
-  pending a finalized way to derive a letter grade from
-  `grading_results.attribute_scores`.
-- **Agmarknet ingestion** is a stub (`scheduler/jobs.py`) — logs on each
-  scheduled run; real API integration is future work.
+- **Grading** runs synchronously in the request/response cycle (no job
+  queue yet). Attributes with a trained checkpoint are scored by
+  MobileNetV3-Small; the rest still use the OpenCV edge-density proxy.
+  YOLOv8n detection is not wired.
+- **Pricing region** — `/adjusted` looks up the most recent price point for a
+  listing's commodity across *all* regions, since listings store lat/lng and
+  `price_points.region` is a free-text state name; mapping one to the other
+  needs reverse geocoding or boundary data.
+- **Agmarknet ingestion** (`scheduler/agmarknet.py`) is real but only runs
+  when `AGMARKNET_API_KEY` is set. It stores one price point per
+  commodity/state/day (mean of that day's mandi modal prices), converted
+  from ₹/quintal to the vertical's `unit_of_measure`.

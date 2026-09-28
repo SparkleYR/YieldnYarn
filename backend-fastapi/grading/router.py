@@ -10,19 +10,34 @@ changing the route contracts.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from db import GradingEvidence, GradingResult, Listing, get_db
+from db import GradingEvidence, GradingResult, Listing, Vertical, get_db, settings
 from grading.grade import derive_grade
 from grading.lookup import get_grading_schema_attributes
 from grading.pipeline import CONFIDENCE_VERIFICATION_THRESHOLD, grade_attributes
 from grading.schemas import GradeRequest, GradeResponse, GradingStatusResponse
 
 router = APIRouter(prefix="/compute/grading", tags=["grading"])
+
+
+_DEFAULT_MEDIA_ROOT = Path(__file__).resolve().parents[2] / "backend-django" / "media"
+
+
+def resolve_evidence_path(stored: str) -> str:
+    """`grading_evidence.file` holds a path relative to Django's MEDIA_ROOT
+    (e.g. `grading_evidence/listing_12/grain.jpg`); resolve it against the
+    same directory so this service can actually open the file."""
+    path = Path(stored)
+    if path.is_absolute():
+        return str(path)
+    media_root = Path(settings.DJANGO_MEDIA_ROOT) if settings.DJANGO_MEDIA_ROOT else _DEFAULT_MEDIA_ROOT
+    return str(media_root / path)
 
 
 def _ml_attribute_names(attributes: list[dict]) -> list[str]:
@@ -38,17 +53,14 @@ def trigger_grading(payload: GradeRequest, db: Session = Depends(get_db)) -> Gra
             raise HTTPException(status_code=404, detail="listing not found")
 
         evidence = db.execute(select(GradingEvidence).where(GradingEvidence.listing_id == listing.id)).scalars().all()
-        # NOTE: `file` stores a path relative to Django's MEDIA_ROOT, not an
-        # absolute path. TODO: resolve against the shared media volume once
-        # this service needs to actually read the files (see docker-compose's
-        # `media` volume) rather than just passing them through.
-        evidence_paths = [e.file for e in evidence if e.file_type == "IMAGE"]
+        evidence_paths = [resolve_evidence_path(e.file) for e in evidence if e.file_type == "IMAGE"]
+        vertical = db.get(Vertical, listing.vertical_id)
         schema_attributes = get_grading_schema_attributes(db, listing.vertical_id)
         ml_attributes = _ml_attribute_names(schema_attributes)
     except SQLAlchemyError as exc:
         raise HTTPException(status_code=503, detail=f"Database not ready: {exc}") from exc
 
-    grading = grade_attributes(evidence_paths, ml_attributes)
+    grading = grade_attributes(evidence_paths, ml_attributes, vertical.slug if vertical else None)
     grade, _grade_score = derive_grade(grading["attribute_scores"], schema_attributes)
 
     persistence_error: str | None = None

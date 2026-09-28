@@ -10,9 +10,18 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta, timezone
+from typing import Optional
 
+import httpx
 from sqlalchemy import update
 from sqlalchemy.exc import SQLAlchemyError
+
+from scheduler.agmarknet import (
+    MAX_TRACKED_COMMODITIES,
+    aggregate_records,
+    fetch_commodity_records,
+    unit_factor,
+)
 
 logger = logging.getLogger("scheduler.jobs")
 
@@ -20,25 +29,165 @@ logger = logging.getLogger("scheduler.jobs")
 STALE_LISTING_DAYS = 30
 
 
-def ingest_agmarknet_prices() -> None:
-    """Fetch latest commodity prices from the Agmarknet API and upsert into `price_points`.
+def _tracked_commodities(session, vertical_id: int, extra: str) -> list[str]:
+    """Commodities worth pricing: everything currently listed or wanted in
+    the vertical, plus any configured extras — rather than a hardcoded list
+    that silently goes stale as sellers list new produce."""
+    from sqlalchemy import select
 
-    TODO: real Agmarknet API integration is future work. Agmarknet
-    (https://agmarknet.gov.in) exposes daily mandi price data; once
-    integrated, this job should:
-      1. Call the Agmarknet API/data feed for each tracked commodity/region.
-      2. Upsert rows into PricePoint (vertical_id, commodity, region, price,
-         source="AGMARKNET", timestamp, raw_data=<raw API payload>).
-      3. Handle partial failures per-commodity without aborting the whole run.
+    from db import Listing, Requirement
 
-    For now this is a stub so the scheduler wiring (interval: every 6 hours)
-    is in place and easy to verify/observe via logs.
-    """
-    logger.info(
-        "[scheduler] ingest_agmarknet_prices stub run at %s -- TODO: integrate real Agmarknet API "
-        "and upsert into PricePoint (see implementation_plan.md §5.4).",
-        datetime.now(timezone.utc).isoformat(),
+    listed = session.execute(
+        select(Listing.commodity_name)
+        .where(
+            Listing.vertical_id == vertical_id,
+            Listing.status.in_(("ACTIVE", "PENDING_GRADING", "PENDING_VERIFICATION")),
+        )
+        .distinct()
+    ).scalars()
+    wanted = session.execute(
+        select(Requirement.commodity)
+        .where(Requirement.vertical_id == vertical_id, Requirement.status == "OPEN")
+        .distinct()
+    ).scalars()
+
+    seen: dict[str, str] = {}
+    for name in [*(c.strip() for c in extra.split(",")), *listed, *wanted]:
+        if name and name.strip() and name.strip().lower() not in seen:
+            seen[name.strip().lower()] = name.strip()
+    return list(seen.values())[:MAX_TRACKED_COMMODITIES]
+
+
+def _upsert_daily_price(session, vertical_id: int, daily, factor: Optional[float]) -> bool:
+    """Insert or refresh one AGMARKNET price point. Returns True if inserted."""
+    from sqlalchemy import select
+
+    from db import PricePoint
+
+    price = round(daily.price_per_quintal * (factor if factor is not None else 1.0), 2)
+    raw_data = {
+        "unit": "per vertical unit" if factor is not None else "quintal",
+        "price_per_quintal": daily.price_per_quintal,
+        "market_count": len(daily.markets),
+        "markets": daily.markets,
+    }
+    existing = session.execute(
+        select(PricePoint).where(
+            PricePoint.vertical_id == vertical_id,
+            PricePoint.commodity == daily.commodity,
+            PricePoint.region == daily.state,
+            PricePoint.source == "AGMARKNET",
+            PricePoint.timestamp == daily.day,
+        )
+    ).scalars().first()
+    if existing is not None:
+        existing.price = price
+        existing.raw_data = raw_data
+        return False
+    session.add(
+        PricePoint(
+            vertical_id=vertical_id,
+            commodity=daily.commodity,
+            region=daily.state,
+            price=price,
+            source="AGMARKNET",
+            timestamp=daily.day,
+            raw_data=raw_data,
+        )
     )
+    return True
+
+
+def ingest_agmarknet_prices(client: Optional[httpx.Client] = None) -> dict:
+    """Pull the latest Agmarknet mandi prices into `price_points` (every 6h).
+
+    See scheduler/agmarknet.py for the data source and aggregation. Skips
+    cleanly (logged, no error) when AGMARKNET_API_KEY isn't set or the
+    agriculture vertical doesn't exist yet. Each commodity is fetched and
+    committed independently, so one failing commodity (API error, bad
+    payload) doesn't lose the others. Re-running is idempotent: a price point
+    for the same commodity/state/day is updated in place, not duplicated.
+
+    Returns a summary dict (also logged) for observability and tests.
+    """
+    from sqlalchemy import select
+
+    from db import SessionLocal, Vertical, settings
+
+    if not settings.AGMARKNET_API_KEY:
+        logger.info("[scheduler] ingest_agmarknet_prices skipped: AGMARKNET_API_KEY is not set")
+        return {"skipped": "AGMARKNET_API_KEY is not set"}
+
+    summary: dict = {"commodities": [], "inserted": 0, "updated": 0, "failed": {}}
+    session = SessionLocal()
+    owns_client = client is None
+    client = client or httpx.Client(timeout=30.0)
+    try:
+        try:
+            vertical = session.execute(
+                select(Vertical).where(Vertical.slug == settings.AGMARKNET_VERTICAL_SLUG)
+            ).scalars().first()
+            if vertical is None:
+                logger.info(
+                    "[scheduler] ingest_agmarknet_prices skipped: no '%s' vertical",
+                    settings.AGMARKNET_VERTICAL_SLUG,
+                )
+                return {"skipped": f"no '{settings.AGMARKNET_VERTICAL_SLUG}' vertical"}
+            commodities = _tracked_commodities(session, vertical.id, settings.AGMARKNET_COMMODITIES)
+        except SQLAlchemyError as exc:
+            logger.warning("[scheduler] ingest_agmarknet_prices skipped (DB not ready): %s", exc)
+            return {"skipped": f"database not ready: {exc}"}
+
+        factor = unit_factor(vertical.unit_of_measure)
+        if factor is None:
+            logger.warning(
+                "[scheduler] unknown unit_of_measure %r for vertical %s; storing Agmarknet prices per quintal",
+                vertical.unit_of_measure,
+                vertical.slug,
+            )
+
+        for commodity in commodities:
+            summary["commodities"].append(commodity)
+            try:
+                fetch = lambda name: fetch_commodity_records(  # noqa: E731
+                    client,
+                    base_url=settings.AGMARKNET_BASE_URL,
+                    resource_id=settings.AGMARKNET_RESOURCE_ID,
+                    api_key=settings.AGMARKNET_API_KEY,
+                    commodity=name,
+                )
+                records = fetch(commodity)
+                # Agmarknet's filter is an exact match on its own Title Case
+                # names ("Wheat"); sellers type whatever ("wheat").
+                if not records and commodity.title() != commodity:
+                    records = fetch(commodity.title())
+                for daily in aggregate_records(commodity, records):
+                    if _upsert_daily_price(session, vertical.id, daily, factor):
+                        summary["inserted"] += 1
+                    else:
+                        summary["updated"] += 1
+                session.commit()
+            except (httpx.HTTPError, ValueError) as exc:
+                session.rollback()
+                summary["failed"][commodity] = str(exc)
+                logger.warning("[scheduler] Agmarknet fetch failed for %s: %s", commodity, exc)
+            except SQLAlchemyError as exc:
+                session.rollback()
+                summary["failed"][commodity] = str(exc)
+                logger.warning("[scheduler] Agmarknet upsert failed for %s: %s", commodity, exc)
+    finally:
+        session.close()
+        if owns_client:
+            client.close()
+
+    logger.info(
+        "[scheduler] ingest_agmarknet_prices: %d commodities, %d inserted, %d updated, %d failed",
+        len(summary["commodities"]),
+        summary["inserted"],
+        summary["updated"],
+        len(summary["failed"]),
+    )
+    return summary
 
 
 def expire_stale_listings() -> None:

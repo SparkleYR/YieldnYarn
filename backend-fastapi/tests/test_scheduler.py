@@ -1,20 +1,11 @@
-"""Tests for scheduler/jobs.py. `expire_stale_listings` needs the live local
-Postgres (see conftest.py's `db_session` docstring); `ingest_agmarknet_prices`
-is a pure stub and needs nothing."""
+"""Tests for scheduler/jobs.py's `expire_stale_listings`, which needs the live
+local Postgres (see conftest.py's `db_session` docstring).
+`ingest_agmarknet_prices` has its own suite in test_agmarknet.py."""
 from datetime import datetime, timedelta, timezone
 
 from db import Listing
-from scheduler.jobs import STALE_LISTING_DAYS, expire_stale_listings, ingest_agmarknet_prices
+from scheduler.jobs import STALE_LISTING_DAYS, expire_stale_listings
 from tests.db_fixtures import cleanup, make_listing, make_user, make_vertical
-
-
-def test_ingest_agmarknet_prices_runs_without_error(caplog):
-    import logging
-
-    with caplog.at_level(logging.INFO, logger="scheduler.jobs"):
-        ingest_agmarknet_prices()  # should not raise — it's a stub, see its own docstring
-
-    assert any("stub run" in record.message for record in caplog.records)
 
 
 def test_expire_stale_listings_marks_old_active_listings_expired(db_session):

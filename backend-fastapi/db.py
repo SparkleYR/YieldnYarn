@@ -56,6 +56,28 @@ class Settings(BaseSettings):
     # still boots for local dev/testing.
     DATABASE_URL: str = "postgresql://msme_dev:devpassword@localhost:5432/msme_marketplace"
 
+    # Agmarknet daily mandi prices via the data.gov.in Open Government Data
+    # API (scheduler/agmarknet.py). Ingestion is skipped while the key is
+    # empty. Get a free key at https://data.gov.in (My Account -> API key).
+    AGMARKNET_API_KEY: str = ""
+    AGMARKNET_BASE_URL: str = "https://api.data.gov.in/resource"
+    # "Current Daily Price of Various Commodities from Various Markets (Mandi)"
+    AGMARKNET_RESOURCE_ID: str = "9ef84268-d588-465a-a308-a864a43d0070"
+    # Vertical whose price_points Agmarknet feeds (it only covers agri produce).
+    AGMARKNET_VERTICAL_SLUG: str = "agriculture"
+    # Extra commodities to always track, comma-separated (e.g. "Wheat,Onion"),
+    # on top of whatever is currently listed/required on the platform.
+    AGMARKNET_COMMODITIES: str = ""
+
+    # Django's MEDIA_ROOT, which `grading_evidence.file` paths are relative
+    # to. Empty = the sibling backend-django/media directory (local dev
+    # layout); set it to the shared media volume's mount point in Docker.
+    DJANGO_MEDIA_ROOT: str = ""
+    # Where fine-tuned grading checkpoints live, laid out as
+    # <dir>/<vertical_slug>/<attribute>.pt (see ml-training/README.md).
+    # Empty = ml-training/checkpoints in this repo.
+    GRADING_MODELS_DIR: str = ""
+
 
 settings = Settings()
 
