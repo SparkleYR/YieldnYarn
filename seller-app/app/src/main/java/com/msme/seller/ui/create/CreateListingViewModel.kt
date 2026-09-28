@@ -8,6 +8,7 @@ import com.msme.seller.core.api.ApiResult
 import com.msme.seller.core.api.errorMessage
 import com.msme.seller.core.listing.DraftField
 import com.msme.seller.core.listing.DraftValidation
+import com.msme.seller.core.listing.IndianStates
 import com.msme.seller.core.listing.ListingDraftInput
 import com.msme.seller.core.listing.ListingDraftValidator
 import com.msme.seller.core.model.BasePrice
@@ -26,7 +27,7 @@ import javax.inject.Inject
 
 enum class CreateStep(val fields: Set<DraftField>) {
     CATEGORY(setOf(DraftField.VERTICAL)),
-    COMMODITY(setOf(DraftField.COMMODITY)),
+    COMMODITY(setOf(DraftField.COMMODITY, DraftField.REGION)),
     QUANTITY(setOf(DraftField.QUANTITY, DraftField.UNIT, DraftField.PRICE)),
     PHOTOS(setOf(DraftField.EVIDENCE)),
     REVIEW(emptySet()),
@@ -39,6 +40,7 @@ data class CreateListingUiState(
     val vertical: Vertical? = null,
     val commodity: String = "",
     val variety: String = "",
+    val region: String = "",
     val quantity: String = "",
     val unit: String = "",
     val price: String = "",
@@ -61,6 +63,7 @@ data class CreateListingUiState(
             priceSuggested = price,
             locationLat = lat,
             locationLng = lng,
+            region = region,
             evidenceCount = photos.size,
         )
 }
@@ -100,6 +103,7 @@ class CreateListingViewModel @Inject constructor(
 
     fun onCommodity(value: String) = _state.update { it.copy(commodity = value, errors = it.errors - DraftField.COMMODITY) }
     fun onVariety(value: String) = _state.update { it.copy(variety = value) }
+    fun onRegion(value: String) = _state.update { it.copy(region = value, errors = it.errors - DraftField.REGION) }
     fun onQuantity(value: String) = _state.update { it.copy(quantity = value, errors = it.errors - DraftField.QUANTITY) }
     fun onUnit(value: String) = _state.update { it.copy(unit = value, errors = it.errors - DraftField.UNIT) }
     fun onPrice(value: String) = _state.update { it.copy(price = value, errors = it.errors - DraftField.PRICE) }
@@ -129,8 +133,9 @@ class CreateListingViewModel @Inject constructor(
     private fun fetchMarketPrice() {
         val slug = state.value.vertical?.slug ?: return
         val commodity = state.value.commodity.takeIf { it.isNotBlank() } ?: return
+        val region = IndianStates.normalize(state.value.region).orEmpty()
         viewModelScope.launch {
-            _state.update { it.copy(marketPrice = market.basePrice(slug, commodity)) }
+            _state.update { it.copy(marketPrice = market.basePrice(slug, commodity, region)) }
         }
     }
 

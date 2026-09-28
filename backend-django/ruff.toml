@@ -1,0 +1,7 @@
+# Pinned rule set so CI doesn't change behaviour when ruff's defaults do.
+target-version = "py311"
+line-length = 120
+extend-exclude = [".venv", "media"]
+
+[lint]
+select = ["E4", "E7", "E9", "F"]

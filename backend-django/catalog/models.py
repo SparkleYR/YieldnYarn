@@ -44,6 +44,11 @@ class Listing(models.Model):
     )
     location_lat = models.FloatField(null=True, blank=True)
     location_lng = models.FloatField(null=True, blank=True)
+    # Free-text state name ("Rajasthan"), the same granularity as
+    # price_points.region (Agmarknet ingestion stores one price per state), so
+    # pricing can use the local mandi price for this listing. Independent of
+    # location_lat/lng, which drive matching's distance filter.
+    region = models.CharField(max_length=150, blank=True, default="")
     status = models.CharField(
         max_length=25, choices=Status.choices, default=Status.DRAFT
     )

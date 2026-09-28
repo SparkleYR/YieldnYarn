@@ -35,6 +35,14 @@ logger = logging.getLogger("scheduler.agmarknet")
 
 PAGE_SIZE = 500
 MAX_PAGES_PER_COMMODITY = 10
+
+# data.gov.in publishes this key on every resource page for trying the API
+# out. It works without an account but caps every response at 10 records, so
+# it's only good for a handful of recent prices per commodity — register for
+# a personal key (free) for real use.
+DATA_GOV_IN_SAMPLE_KEY = "579b464db66ec23bdd000001cdd3946e44ce4aad7209ff7b23ac571b"
+SAMPLE_KEY_PAGE_SIZE = 10
+SAMPLE_KEY_MAX_PAGES = 5
 MAX_TRACKED_COMMODITIES = 50
 
 # Agmarknet reports ₹/quintal; multiply by this to get ₹ per vertical unit.
@@ -127,17 +135,19 @@ def fetch_commodity_records(
     resource_id: str,
     api_key: str,
     commodity: str,
+    page_size: int = PAGE_SIZE,
+    max_pages: int = MAX_PAGES_PER_COMMODITY,
 ) -> list[dict]:
     """All records for one commodity, following offset pagination."""
     records: list[dict] = []
-    for page in range(MAX_PAGES_PER_COMMODITY):
+    for page in range(max_pages):
         response = client.get(
             f"{base_url.rstrip('/')}/{resource_id}",
             params={
                 "api-key": api_key,
                 "format": "json",
-                "limit": PAGE_SIZE,
-                "offset": page * PAGE_SIZE,
+                "limit": page_size,
+                "offset": page * page_size,
                 "filters[commodity]": commodity,
             },
         )
@@ -146,7 +156,7 @@ def fetch_commodity_records(
         batch = body.get("records") or []
         records.extend(batch)
         total = int(body.get("total") or 0)
-        if len(batch) < PAGE_SIZE or (total and len(records) >= total):
+        if len(batch) < page_size or (total and len(records) >= total):
             break
     return records
 

@@ -72,7 +72,7 @@ class LiveBackendTest {
             listOf(
                 PendingDraft(
                     clientUuid,
-                    CreateListingRequest(clientUuid, vertical.id, "Wheat", "Sharbati", BigDecimal("40"), vertical.unitOfMeasure, BigDecimal("2450"), 26.91, 75.79),
+                    CreateListingRequest(clientUuid, vertical.id, "Wheat", "Sharbati", BigDecimal("40"), vertical.unitOfMeasure, BigDecimal("2450"), 26.91, 75.79, region = "Rajasthan"),
                     serverId = null,
                     evidence = listOf(PendingEvidence(1, photo)),
                     gradingTriggered = false,
@@ -82,6 +82,7 @@ class LiveBackendTest {
         assertEquals(SyncReport(synced = 1), SyncEngine(api, store).syncAll())
         val listing = store.synced.getValue(clientUuid)
         assertEquals(clientUuid, listing.clientUuid)
+        assertEquals("Rajasthan", listing.region)
         assertTrue(listing.status in setOf("ACTIVE", "PENDING_VERIFICATION"))
         assertEquals(1, (apiCall { api.evidence(listing.id) } as ApiResult.Success).value.size)
         assertNotNull((apiCall { api.gradingResults(listing.id) } as ApiResult.Success).value.firstOrNull()?.confidenceScore)

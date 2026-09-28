@@ -9,7 +9,7 @@ from sqlalchemy import Boolean, Column, DateTime, Integer, String, Table, text
 # `matching.allocation`) regardless of the directory pytest is invoked from.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from db import Base, SessionLocal, engine  # noqa: E402
+from db import Base, SessionLocal  # noqa: E402
 
 # `db.py` deliberately doesn't map the `users` table (see its docstring —
 # nothing on the compute path needs to write users). Tests need it anyway,

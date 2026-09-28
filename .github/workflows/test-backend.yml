@@ -5,10 +5,26 @@ on:
     paths:
       - "backend-django/**"
       - "backend-fastapi/**"
+      - "ml-training/scripts/**"
+      - ".github/workflows/test-backend.yml"
   pull_request:
     paths:
       - "backend-django/**"
       - "backend-fastapi/**"
+      - "ml-training/scripts/**"
+      - ".github/workflows/test-backend.yml"
+
+# Both suites run against a real Postgres (the Django schema is the source of
+# truth; FastAPI's tests read/write the same tables).
+env:
+  DB_NAME: msme_marketplace
+  DB_USER: msme_dev
+  DB_PASSWORD: devpassword
+  DB_HOST: localhost
+  DB_PORT: "5432"
+  DATABASE_URL: postgresql://msme_dev:devpassword@localhost:5432/msme_marketplace
+  DJANGO_SECRET_KEY: ci-test-secret
+  DJANGO_DEBUG: "True"
 
 jobs:
   test-django:
@@ -17,20 +33,16 @@ jobs:
       postgres:
         image: postgis/postgis:17-3.5
         env:
-          POSTGRES_DB: msme_marketplace_test
+          POSTGRES_DB: msme_marketplace
           POSTGRES_USER: msme_dev
           POSTGRES_PASSWORD: devpassword
         ports:
           - 5432:5432
         options: >-
-          --health-cmd pg_isready
+          --health-cmd "pg_isready -U msme_dev -d msme_marketplace"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-    env:
-      DATABASE_URL: postgresql://msme_dev:devpassword@localhost:5432/msme_marketplace_test
-      DJANGO_SECRET_KEY: ci-test-secret
-      DJANGO_DEBUG: "True"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -42,22 +54,42 @@ jobs:
       - name: Run migrations
         working-directory: backend-django
         run: python manage.py migrate
+      - name: Check for missing migrations
+        working-directory: backend-django
+        run: python manage.py makemigrations --check --dry-run
       - name: Run tests
         working-directory: backend-django
-        run: python manage.py test
+        run: python manage.py test --parallel 4
 
   test-fastapi:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgis/postgis:17-3.5
+        env:
+          POSTGRES_DB: msme_marketplace
+          POSTGRES_USER: msme_dev
+          POSTGRES_PASSWORD: devpassword
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U msme_dev -d msme_marketplace"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install dependencies
-        working-directory: backend-fastapi
+      - name: Create schema via Django migrations
+        working-directory: backend-django
         run: |
           pip install -r requirements.txt
-          pip install pytest httpx
+          python manage.py migrate
+      - name: Install dependencies
+        working-directory: backend-fastapi
+        run: pip install -r requirements.txt -r requirements-dev.txt
       - name: Run tests
         working-directory: backend-fastapi
         run: pytest

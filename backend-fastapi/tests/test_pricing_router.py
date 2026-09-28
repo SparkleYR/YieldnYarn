@@ -148,3 +148,40 @@ def test_trends_returns_points_within_window(client, db_session):
         assert body["points"][0]["price"] == 1000.0
     finally:
         cleanup(db_session, vertical_ids=[vertical_id], price_point_ids=[in_window, out_of_window])
+
+
+def test_adjusted_price_prefers_the_listings_own_state(client, db_session):
+    seller_id = make_user(db_session, "seller-region@pytest-fastapi.test", "SELLER")
+    vertical_id = make_vertical(db_session, "pytest-pricing-region")
+    listing_id = make_listing(db_session, seller_id, vertical_id, commodity_name="Pytest Wheat", region="Rajasthan")
+    older = datetime.now(timezone.utc) - timedelta(days=2)
+    local = make_price_point(db_session, vertical_id, commodity="Pytest Wheat", region="Rajasthan", price=2400.0, timestamp=older)
+    elsewhere = make_price_point(db_session, vertical_id, commodity="Pytest Wheat", region="Punjab", price=2600.0)
+    try:
+        body = client.get("/compute/pricing/adjusted", params={"listing_id": listing_id}).json()
+
+        # The newer Punjab price loses to the listing's own state's price.
+        assert body["base_price"] == 2400.0
+        assert body["price_region"] == "Rajasthan"
+    finally:
+        cleanup(
+            db_session, listing_ids=[listing_id], vertical_ids=[vertical_id], seller_ids=[seller_id],
+            price_point_ids=[local, elsewhere],
+        )
+
+
+def test_adjusted_price_falls_back_to_any_region_without_local_data(client, db_session):
+    seller_id = make_user(db_session, "seller-region2@pytest-fastapi.test", "SELLER")
+    vertical_id = make_vertical(db_session, "pytest-pricing-region2")
+    listing_id = make_listing(db_session, seller_id, vertical_id, commodity_name="Pytest Wheat", region="Kerala")
+    elsewhere = make_price_point(db_session, vertical_id, commodity="Pytest Wheat", region="Punjab", price=2600.0)
+    try:
+        body = client.get("/compute/pricing/adjusted", params={"listing_id": listing_id}).json()
+
+        assert body["base_price"] == 2600.0
+        assert body["price_region"] is None
+    finally:
+        cleanup(
+            db_session, listing_ids=[listing_id], vertical_ids=[vertical_id], seller_ids=[seller_id],
+            price_point_ids=[elsewhere],
+        )

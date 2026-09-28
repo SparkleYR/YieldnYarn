@@ -6,7 +6,6 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from catalog.models import Listing
 from core.permissions import IsBidPartyOrAdmin, IsOwnerOrAdmin
 from catalog.serializers import _display_name
 from notifications.models import Notification

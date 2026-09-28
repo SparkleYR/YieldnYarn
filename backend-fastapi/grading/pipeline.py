@@ -22,7 +22,7 @@ import logging
 from pathlib import Path
 from typing import Callable, Optional
 
-from grading.classifier import combine_predictions, load_classifier
+from grading.classifier import combine_predictions, load_classifier, load_grader
 
 logger = logging.getLogger("grading.pipeline")
 
@@ -98,10 +98,25 @@ def _edge_density_proxy(evidence_paths: list[str], preprocess_evidence) -> Optio
 
 def _model_scores(
     evidence_paths: list[str], ml_attribute_names: list[str], vertical_slug: Optional[str]
-) -> dict[str, tuple[float, float]]:
-    """{attribute: (score, confidence)} for attributes with a trained classifier."""
+) -> tuple[dict[str, tuple[float, float]], list[str]]:
+    """({attribute: (score, confidence)}, method notes) for attributes a
+    trained model covers: the vertical grader first, then any per-attribute
+    classifiers for what it doesn't cover."""
     results: dict[str, tuple[float, float]] = {}
+    notes: list[str] = []
+    grader = load_grader(vertical_slug)
+    if grader is not None and grader.attributes & set(ml_attribute_names):
+        graded = grader.analyze(evidence_paths)
+        if graded is None:
+            notes.append(f"{grader.analysis.get('mode')} grader found nothing to classify in the photos")
+        else:
+            for name in ml_attribute_names:
+                if name in graded.scores:
+                    results[name] = (graded.scores[name], graded.confidence)
+            notes.append(graded.describe())
     for name in ml_attribute_names:
+        if name in results:
+            continue
         classifier = load_classifier(vertical_slug, name)
         if classifier is None:
             continue
@@ -114,7 +129,8 @@ def _model_scores(
         if predictions:
             combined = combine_predictions(predictions)
             results[name] = (combined.score, combined.confidence)
-    return results
+            notes.append(f"mobilenetv3-small ({name})")
+    return results, notes
 
 
 def grade_attributes(
@@ -141,7 +157,7 @@ def grade_attributes(
     if not evidence_paths:
         return _stub_result(ml_attribute_names, reason="no image evidence uploaded")
 
-    model_scores = _model_scores(evidence_paths, ml_attribute_names, vertical_slug)
+    model_scores, model_notes = _model_scores(evidence_paths, ml_attribute_names, vertical_slug)
     remaining = [name for name in ml_attribute_names if name not in model_scores]
 
     proxy_score: Optional[float] = None
@@ -173,16 +189,15 @@ def grade_attributes(
     # shaky attribute should still send it to a human verifier.
     confidence = round(min(confidences), 4)
 
+    fallback = "opencv-heuristic-proxy" if proxy_score is not None else "stub"
     if not model_scores:
-        method = "opencv-heuristic-proxy (pretrained model weights not yet plugged in)"
+        method = "opencv-heuristic-proxy (no trained model for these attributes yet)"
+        if model_notes:
+            method += "; " + "; ".join(model_notes)
     elif not remaining:
-        method = f"mobilenetv3-small ({', '.join(sorted(model_scores))})"
+        method = "; ".join(model_notes)
     else:
-        fallback = "opencv-heuristic-proxy" if proxy_score is not None else "stub"
-        method = (
-            f"mobilenetv3-small ({', '.join(sorted(model_scores))}); "
-            f"{fallback} ({', '.join(remaining)})"
-        )
+        method = "; ".join(model_notes) + f"; {fallback} ({', '.join(remaining)})"
 
     return {
         "attribute_scores": scores,

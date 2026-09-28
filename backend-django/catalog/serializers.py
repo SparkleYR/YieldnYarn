@@ -41,6 +41,7 @@ class ListingSerializer(serializers.ModelSerializer):
             "price_final",
             "location_lat",
             "location_lng",
+            "region",
             "status",
             "grade",
             "grade_confidence",

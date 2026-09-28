@@ -73,14 +73,16 @@ def adjusted_price(listing_id: int = Query(...), db: Session = Depends(get_db)):
 
         vertical = db.get(Vertical, listing.vertical_id)
         rule = db.execute(select(PricingRule).where(PricingRule.vertical_id == listing.vertical_id)).scalars().first()
-        # NOTE: `listings` has no text `region` field (it stores
-        # location_lat/location_lng floats — see db.py); `price_points.region`
-        # is a free-text mandi/market region string, so there's no direct join
-        # key between the two yet. TODO: derive a region label from
-        # location_lat/lng (e.g. reverse-geocode or a state/district lookup)
-        # once that's needed for precise matching. For now, look up the most
-        # recent price for this commodity across all regions.
-        pp = _latest_price_point(db, listing.vertical_id, listing.commodity_name, region=None)
+        # Prefer the listing's own state's price (price_points.region is a
+        # state name — see scheduler/agmarknet.py); fall back to the latest
+        # price anywhere when the listing has no region or its state has no
+        # data yet.
+        pp = None
+        if listing.region:
+            pp = _latest_price_point(db, listing.vertical_id, listing.commodity_name, region=listing.region)
+        region_used = listing.region if pp is not None else None
+        if pp is None:
+            pp = _latest_price_point(db, listing.vertical_id, listing.commodity_name, region=None)
         base = pp.price if pp is not None else (listing.price_suggested or 0.0)
 
         latest_grading = (
@@ -105,6 +107,7 @@ def adjusted_price(listing_id: int = Query(...), db: Session = Depends(get_db)):
         "listing_id": listing_id,
         "vertical": vertical.slug if vertical else None,
         "base_price": base,
+        "price_region": region_used,
         "adjusted_price": adjusted,
         "grade_used": grade,
         "has_grading_result": latest_grading is not None,

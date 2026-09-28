@@ -14,10 +14,11 @@ data class ListingDraftInput(
     val priceSuggested: String = "",
     val locationLat: Double? = null,
     val locationLng: Double? = null,
+    val region: String = "",
     val evidenceCount: Int = 0,
 )
 
-enum class DraftField { VERTICAL, COMMODITY, QUANTITY, UNIT, PRICE, EVIDENCE }
+enum class DraftField { VERTICAL, COMMODITY, REGION, QUANTITY, UNIT, PRICE, EVIDENCE }
 
 sealed interface DraftValidation {
     data class Valid(val request: CreateListingRequest) : DraftValidation
@@ -46,6 +47,7 @@ object ListingDraftValidator {
                 priceSuggested = input.priceSuggested.takeIf { it.isNotBlank() }?.let(::parseAmount),
                 locationLat = input.locationLat,
                 locationLng = input.locationLng,
+                region = IndianStates.normalize(input.region).orEmpty(),
             ),
         )
     }
@@ -62,6 +64,9 @@ object ListingDraftValidator {
             quantity == null -> put(DraftField.QUANTITY, "Enter a number, e.g. 25 or 12.5")
             quantity.signum() <= 0 -> put(DraftField.QUANTITY, "Quantity must be more than zero")
             quantity > MAX_QUANTITY -> put(DraftField.QUANTITY, "That quantity is too large")
+        }
+        if (input.region.isNotBlank() && IndianStates.normalize(input.region) == null) {
+            put(DraftField.REGION, "Pick your state from the list")
         }
         if (input.unit.isBlank()) put(DraftField.UNIT, "Enter a unit")
         if (input.priceSuggested.isNotBlank()) {

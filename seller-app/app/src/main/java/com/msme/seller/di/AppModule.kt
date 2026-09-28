@@ -40,7 +40,9 @@ object AppModule {
     @Provides
     @Singleton
     fun database(@ApplicationContext context: Context): AppDatabase =
-        Room.databaseBuilder(context, AppDatabase::class.java, "seller.db").build()
+        Room.databaseBuilder(context, AppDatabase::class.java, "seller.db")
+            .addMigrations(AppDatabase.MIGRATION_1_2)
+            .build()
 
     @Provides
     fun draftStore(db: AppDatabase): DraftStore = RoomDraftStore(db)

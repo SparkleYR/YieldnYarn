@@ -5,40 +5,26 @@ on:
     paths:
       - "backend-django/**"
       - "backend-fastapi/**"
+      - ".github/workflows/lint-backend.yml"
   pull_request:
     paths:
       - "backend-django/**"
       - "backend-fastapi/**"
+      - ".github/workflows/lint-backend.yml"
 
 jobs:
-  lint-django:
+  ruff:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [backend-django, backend-fastapi]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install dependencies
-        working-directory: backend-django
-        run: |
-          pip install ruff mypy
-          pip install -r requirements.txt
+      # Pinned: each ruff release can widen the default rule set (see ruff.toml).
+      - run: pip install ruff==0.15.8
       - name: Ruff
-        working-directory: backend-django
-        run: ruff check .
-
-  lint-fastapi:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Install dependencies
-        working-directory: backend-fastapi
-        run: |
-          pip install ruff mypy
-          pip install -r requirements.txt
-      - name: Ruff
-        working-directory: backend-fastapi
+        working-directory: ${{ matrix.service }}
         run: ruff check .

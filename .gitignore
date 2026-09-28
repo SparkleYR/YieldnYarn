@@ -33,6 +33,7 @@ ml-training/**/*.pth
 ml-training/**/checkpoints/
 ml-training/**/runs/
 ml-training/data/
+ml-training/external/
 
 # --- OS / Editor ---
 .DS_Store

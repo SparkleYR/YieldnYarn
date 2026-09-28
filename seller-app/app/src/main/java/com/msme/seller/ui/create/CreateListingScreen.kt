@@ -28,6 +28,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.outlined.ArrowDropDown
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.MyLocation
 import androidx.compose.material.icons.outlined.PhotoCamera
@@ -36,6 +37,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
@@ -51,6 +54,9 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -59,12 +65,14 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.PopupProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.msme.seller.R
 import com.msme.seller.core.format.Money
 import com.msme.seller.core.listing.DraftField
+import com.msme.seller.core.listing.IndianStates
 import com.msme.seller.core.listing.ListingDraftValidator
 import com.msme.seller.ui.components.ErrorState
 import com.msme.seller.ui.components.LabeledValue
@@ -202,6 +210,53 @@ private fun CommodityStep(state: CreateListingUiState, viewModel: CreateListingV
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
+        RegionPicker(state.region, viewModel::onRegion, DraftField.REGION in state.errors)
+        FieldError(state.errors, DraftField.REGION)
+        Text(
+            stringResource(R.string.create_region_why),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/** Free text with state suggestions, so "rajasthan" or "Chhattisgarh" still map to the price data's spelling. */
+@Composable
+private fun RegionPicker(value: String, onChange: (String) -> Unit, isError: Boolean) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        OutlinedTextField(
+            value = value,
+            onValueChange = {
+                onChange(it)
+                open = true
+            },
+            label = { Text(stringResource(R.string.field_region)) },
+            placeholder = { Text(stringResource(R.string.field_region_placeholder)) },
+            isError = isError,
+            singleLine = true,
+            trailingIcon = {
+                IconButton(onClick = { open = !open }) {
+                    Icon(Icons.Outlined.ArrowDropDown, contentDescription = stringResource(R.string.field_region))
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+        )
+        DropdownMenu(
+            expanded = open,
+            onDismissRequest = { open = false },
+            properties = PopupProperties(focusable = false),
+        ) {
+            IndianStates.suggest(value).forEach { state ->
+                DropdownMenuItem(
+                    text = { Text(state) },
+                    onClick = {
+                        onChange(state)
+                        open = false
+                    },
+                )
+            }
+        }
     }
 }
 
@@ -342,6 +397,7 @@ private fun ReviewStep(state: CreateListingUiState, viewModel: CreateListingView
                 ReviewRow(stringResource(R.string.field_commodity), listOf(state.commodity, state.variety).filter { it.isNotBlank() }.joinToString(" · ")) {
                     viewModel.goTo(CreateStep.COMMODITY)
                 }
+                ReviewRow(stringResource(R.string.field_region), state.region.ifBlank { "—" }) { viewModel.goTo(CreateStep.COMMODITY) }
                 ReviewRow(stringResource(R.string.field_quantity), "${state.quantity} ${state.unit}") { viewModel.goTo(CreateStep.QUANTITY) }
                 ReviewRow(
                     stringResource(R.string.field_your_price),

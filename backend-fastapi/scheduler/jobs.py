@@ -17,7 +17,12 @@ from sqlalchemy import update
 from sqlalchemy.exc import SQLAlchemyError
 
 from scheduler.agmarknet import (
+    DATA_GOV_IN_SAMPLE_KEY,
+    MAX_PAGES_PER_COMMODITY,
     MAX_TRACKED_COMMODITIES,
+    PAGE_SIZE,
+    SAMPLE_KEY_MAX_PAGES,
+    SAMPLE_KEY_PAGE_SIZE,
     aggregate_records,
     fetch_commodity_records,
     unit_factor,
@@ -102,7 +107,7 @@ def ingest_agmarknet_prices(client: Optional[httpx.Client] = None) -> dict:
     """Pull the latest Agmarknet mandi prices into `price_points` (every 6h).
 
     See scheduler/agmarknet.py for the data source and aggregation. Skips
-    cleanly (logged, no error) when AGMARKNET_API_KEY isn't set or the
+    cleanly (logged, no error) when no API key is available or the
     agriculture vertical doesn't exist yet. Each commodity is fetched and
     committed independently, so one failing commodity (API error, bad
     payload) doesn't lose the others. Re-running is idempotent: a price point
@@ -114,9 +119,18 @@ def ingest_agmarknet_prices(client: Optional[httpx.Client] = None) -> dict:
 
     from db import SessionLocal, Vertical, settings
 
-    if not settings.AGMARKNET_API_KEY:
-        logger.info("[scheduler] ingest_agmarknet_prices skipped: AGMARKNET_API_KEY is not set")
-        return {"skipped": "AGMARKNET_API_KEY is not set"}
+    api_key = settings.AGMARKNET_API_KEY
+    page_size, max_pages = PAGE_SIZE, MAX_PAGES_PER_COMMODITY
+    if not api_key:
+        if not settings.AGMARKNET_USE_SAMPLE_KEY:
+            logger.info("[scheduler] ingest_agmarknet_prices skipped: AGMARKNET_API_KEY is not set")
+            return {"skipped": "AGMARKNET_API_KEY is not set"}
+        logger.info(
+            "[scheduler] AGMARKNET_API_KEY not set; using data.gov.in's public sample key "
+            "(10 records per request). Register a free key for full coverage."
+        )
+        api_key = DATA_GOV_IN_SAMPLE_KEY
+        page_size, max_pages = SAMPLE_KEY_PAGE_SIZE, SAMPLE_KEY_MAX_PAGES
 
     summary: dict = {"commodities": [], "inserted": 0, "updated": 0, "failed": {}}
     session = SessionLocal()
@@ -153,8 +167,10 @@ def ingest_agmarknet_prices(client: Optional[httpx.Client] = None) -> dict:
                     client,
                     base_url=settings.AGMARKNET_BASE_URL,
                     resource_id=settings.AGMARKNET_RESOURCE_ID,
-                    api_key=settings.AGMARKNET_API_KEY,
+                    api_key=api_key,
                     commodity=name,
+                    page_size=page_size,
+                    max_pages=max_pages,
                 )
                 records = fetch(commodity)
                 # Agmarknet's filter is an exact match on its own Title Case

@@ -85,6 +85,8 @@ data class CreateListingRequest(
     @SerializedName("price_suggested") val priceSuggested: BigDecimal?,
     @SerializedName("location_lat") val locationLat: Double?,
     @SerializedName("location_lng") val locationLng: Double?,
+    /** State name, matched against price_points.region for local pricing. */
+    val region: String = "",
 )
 
 data class Listing(
@@ -100,6 +102,7 @@ data class Listing(
     @SerializedName("price_final") val priceFinal: BigDecimal?,
     @SerializedName("location_lat") val locationLat: Double?,
     @SerializedName("location_lng") val locationLng: Double?,
+    val region: String?,
     val status: String,
     val grade: String?,
     @SerializedName("grade_confidence") val gradeConfidence: Double?,

@@ -67,4 +67,19 @@ class ListingDraftValidatorTest {
         assertTrue(ListingFilter.PENDING.matches(ListingStatus.PENDING_VERIFICATION))
         assertEquals(ListingStatus.UNKNOWN, ListingStatus.from("SOMETHING_NEW"))
     }
+
+    @Test
+    fun `region is optional but must be a known state, normalized to the price data's spelling`() {
+        val ok = ListingDraftValidator.validate(valid.copy(region = " chhattisgarh ")) as DraftValidation.Valid
+        assertEquals("Chattisgarh", ok.request.region)
+        assertEquals("", (ListingDraftValidator.validate(valid) as DraftValidation.Valid).request.region)
+        val bad = ListingDraftValidator.validate(valid.copy(region = "Atlantis")) as DraftValidation.Invalid
+        assertEquals(setOf(DraftField.REGION), bad.errors.keys)
+    }
+
+    @Test
+    fun `state suggestions`() {
+        assertEquals("Rajasthan", IndianStates.suggest("raj").first())
+        assertEquals("NCT of Delhi", IndianStates.normalize("Delhi"))
+    }
 }

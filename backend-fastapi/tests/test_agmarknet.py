@@ -117,9 +117,31 @@ def _delete_price_points(db_session, vertical_id):
     db_session.commit()
 
 
-def test_skips_without_an_api_key(monkeypatch):
+def test_skips_without_an_api_key_when_the_sample_key_is_disabled(monkeypatch):
     monkeypatch.setattr(db_module.settings, "AGMARKNET_API_KEY", "")
+    monkeypatch.setattr(db_module.settings, "AGMARKNET_USE_SAMPLE_KEY", False)
     assert "skipped" in ingest_agmarknet_prices()
+
+
+def test_falls_back_to_the_public_sample_key_with_its_10_record_pages(db_session, agmarknet_settings, monkeypatch):
+    monkeypatch.setattr(db_module.settings, "AGMARKNET_API_KEY", "")
+    monkeypatch.setattr(db_module.settings, "AGMARKNET_USE_SAMPLE_KEY", True)
+    monkeypatch.setattr(db_module.settings, "AGMARKNET_COMMODITIES", "Wheat")
+    vertical_id = make_vertical(db_session, "pytest-agmarknet")
+    seen = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append((request.url.params["api-key"], request.url.params["limit"]))
+        return httpx.Response(200, json={"total": 3, "records": WHEAT_RECORDS})
+
+    try:
+        with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+            summary = ingest_agmarknet_prices(client=client)
+        assert seen[0] == ("579b464db66ec23bdd000001cdd3946e44ce4aad7209ff7b23ac571b", "10")
+        assert summary["inserted"] == 2
+    finally:
+        _delete_price_points(db_session, vertical_id)
+        cleanup(db_session, vertical_ids=[vertical_id])
 
 
 def test_skips_when_the_vertical_does_not_exist(agmarknet_settings):

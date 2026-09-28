@@ -23,7 +23,15 @@ class MarketRepository @Inject constructor(private val api: SellerApi, private v
         }.let { result -> if (result is ApiResult.Success) ApiResult.Success(cachedVerticals!!, 200) else result }
     }
 
-    /** Latest market price (Agmarknet / admin-entered), or null when there's no data. */
-    suspend fun basePrice(verticalSlug: String, commodity: String): BasePrice? =
-        (apiCall { pricing.basePrice(verticalSlug, commodity.trim()) } as? ApiResult.Success)?.value
+    /**
+     * Latest market price (Agmarknet / admin-entered): the seller's own state
+     * first, then anywhere. Null when there's no data at all.
+     */
+    suspend fun basePrice(verticalSlug: String, commodity: String, region: String = ""): BasePrice? {
+        if (region.isNotBlank()) {
+            (apiCall { pricing.basePrice(verticalSlug, commodity.trim(), region) } as? ApiResult.Success)?.value
+                ?.let { return it }
+        }
+        return (apiCall { pricing.basePrice(verticalSlug, commodity.trim()) } as? ApiResult.Success)?.value
+    }
 }

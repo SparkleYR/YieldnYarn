@@ -1,5 +1,6 @@
 package com.msme.seller.data.local
 
+import androidx.room.ColumnInfo
 import androidx.room.Embedded
 import androidx.room.Entity
 import androidx.room.ForeignKey
@@ -37,6 +38,9 @@ data class DraftListingEntity(
     val priceSuggested: BigDecimal?,
     val locationLat: Double?,
     val locationLng: Double?,
+    // defaultValue must match MIGRATION_1_2's `DEFAULT ''`, or Room's
+    // post-migration schema check fails.
+    @ColumnInfo(defaultValue = "") val region: String = "",
     val createdAt: Long,
     val serverId: Long? = null,
     val gradingTriggered: Boolean = false,
@@ -82,6 +86,7 @@ data class CachedListingEntity(
     val unit: String,
     val priceSuggested: BigDecimal?,
     val priceFinal: BigDecimal?,
+    @ColumnInfo(defaultValue = "") val region: String = "",
     val status: String,
     val grade: String?,
     val gradeConfidence: Double?,

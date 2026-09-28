@@ -161,4 +161,7 @@
         <item quantity="one">%d listing hasn\'t uploaded yet and will be lost if you log out.</item>
         <item quantity="other">%d listings haven\'t uploaded yet and will be lost if you log out.</item>
     </plurals>
+    <string name="field_region">State</string>
+    <string name="field_region_placeholder">e.g. Rajasthan</string>
+    <string name="create_region_why">Used to show your local mandi price and to find buyers near you.</string>
 </resources>

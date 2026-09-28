@@ -128,6 +128,9 @@ fun ListingDetailScreen(
                             listing.subCategory?.takeIf { it.isNotBlank() }?.let {
                                 LabeledValue(stringResource(R.string.field_variety), it)
                             }
+                            listing.region?.takeIf { it.isNotBlank() }?.let {
+                                LabeledValue(stringResource(R.string.field_region), it)
+                            }
                         }
                     }
                 }

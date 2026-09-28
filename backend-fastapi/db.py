@@ -60,6 +60,9 @@ class Settings(BaseSettings):
     # API (scheduler/agmarknet.py). Ingestion is skipped while the key is
     # empty. Get a free key at https://data.gov.in (My Account -> API key).
     AGMARKNET_API_KEY: str = ""
+    # Without a key, fall back to data.gov.in's public sample key (10 records
+    # per request) so prices flow out of the box. Set false to disable.
+    AGMARKNET_USE_SAMPLE_KEY: bool = True
     AGMARKNET_BASE_URL: str = "https://api.data.gov.in/resource"
     # "Current Daily Price of Various Commodities from Various Markets (Mandi)"
     AGMARKNET_RESOURCE_ID: str = "9ef84268-d588-465a-a308-a864a43d0070"
@@ -183,6 +186,9 @@ class Listing(Base):
     # Requirement.search_radius_km.
     location_lat = Column(Float, nullable=True)
     location_lng = Column(Float, nullable=True)
+    # State name matching price_points.region; NOT NULL with an ORM-only
+    # default on the Django side, so mirrored with a Python default here.
+    region = Column(String, default="", nullable=False)
     status = Column(String, default="DRAFT", nullable=False)
     created_at = Column(DateTime(timezone=True))
     updated_at = Column(DateTime(timezone=True))

@@ -161,4 +161,7 @@
         <item quantity="one">%d लिस्टिंग अभी अपलोड नहीं हुई है और लॉग आउट करने पर हट जाएगी।</item>
         <item quantity="other">%d लिस्टिंग अभी अपलोड नहीं हुई हैं और लॉग आउट करने पर हट जाएँगी।</item>
     </plurals>
+    <string name="field_region">राज्य</string>
+    <string name="field_region_placeholder">जैसे राजस्थान</string>
+    <string name="create_region_why">इससे आपके राज्य का मंडी भाव दिखता है और पास के खरीदार मिलते हैं।</string>
 </resources>
