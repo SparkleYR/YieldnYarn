@@ -20,6 +20,7 @@ from orders.models import Order
 from .models import User
 from .serializers import (
     AdminUserSerializer,
+    MeUpdateSerializer,
     MyTokenObtainPairSerializer,
     PasswordResetConfirmSerializer,
     PasswordResetRequestSerializer,
@@ -45,12 +46,20 @@ class LoginView(TokenObtainPairView):
 
 
 class MeView(APIView):
-    """GET /api/auth/me/"""
+    """GET /api/auth/me/, PATCH /api/auth/me/ (phone + profile fields)"""
 
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
         return Response(UserSerializer(request.user).data)
+
+    def patch(self, request):
+        serializer = MeUpdateSerializer(request.user, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+        # Re-read so a freshly created profile is reflected in the response.
+        user = User.objects.select_related("profile").get(pk=user.pk)
+        return Response(UserSerializer(user).data)
 
 
 class PasswordResetRequestView(APIView):

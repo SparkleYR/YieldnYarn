@@ -36,6 +36,28 @@ class UserSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "is_active", "created_at"]
 
 
+class MeUpdateSerializer(serializers.ModelSerializer):
+    """PATCH /api/auth/me/ — a user editing their own account. Email and role
+    are deliberately not editable here (role changes would be a privilege
+    escalation; email is the login identity)."""
+
+    profile = UserProfileSerializer(required=False)
+
+    class Meta:
+        model = User
+        fields = ["phone", "profile"]
+
+    def update(self, instance, validated_data):
+        profile_data = validated_data.pop("profile", None)
+        instance = super().update(instance, validated_data)
+        if profile_data:
+            profile, _created = UserProfile.objects.get_or_create(user=instance)
+            for field, value in profile_data.items():
+                setattr(profile, field, value)
+            profile.save()
+        return instance
+
+
 class AdminUserSerializer(serializers.ModelSerializer):
     """Admin user-management list/detail. Only `is_active` is writable here —
     email/phone/role changes are out of scope for this endpoint."""

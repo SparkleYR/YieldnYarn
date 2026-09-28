@@ -1,5 +1,6 @@
 import httpx
 from django.conf import settings
+from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import parsers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -21,9 +22,9 @@ from .serializers import (
 
 class ListingViewSet(viewsets.ModelViewSet):
     """
-    /api/catalog/listings/                       (list, create)
+    /api/catalog/listings/                       (list, create — idempotent on client_uuid)
     /api/catalog/listings/{id}/                   (retrieve, update, destroy)
-    /api/catalog/listings/{id}/evidence/          (POST file upload)
+    /api/catalog/listings/{id}/evidence/          (GET list, POST file upload)
     /api/catalog/listings/{id}/grading/           (GET grading results)
     /api/catalog/listings/{id}/grading/trigger/   (POST -> triggers FastAPI grading)
     """
@@ -50,14 +51,48 @@ class ListingViewSet(viewsets.ModelViewSet):
         # BUYER (and any other authenticated role) only sees ACTIVE listings
         return qs.filter(status=Listing.Status.ACTIVE)
 
+    def create(self, request, *args, **kwargs):
+        # Idempotent replay for the offline-first seller app (implementation
+        # plan §8.3): it generates `client_uuid` when the listing is drafted
+        # on-device and sends it on every sync attempt. If an earlier attempt
+        # already created the row (e.g. the response was lost when the
+        # connection dropped), hand back that row with 200 instead of
+        # creating a duplicate — "server wins" conflict resolution, so the
+        # app replaces its local copy with this response.
+        client_uuid = request.data.get("client_uuid")
+        if client_uuid:
+            existing = self._existing_for_client_uuid(client_uuid)
+            if existing is not None:
+                if existing.seller_id != request.user.id:
+                    return Response(
+                        {"client_uuid": ["This client_uuid is already in use."]},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                return Response(self.get_serializer(existing).data, status=status.HTTP_200_OK)
+        return super().create(request, *args, **kwargs)
+
+    @staticmethod
+    def _existing_for_client_uuid(client_uuid):
+        try:
+            return Listing.objects.filter(client_uuid=client_uuid).first()
+        except (ValueError, DjangoValidationError):
+            # Malformed UUID — let the serializer produce the normal 400.
+            return None
+
     def perform_create(self, serializer):
         serializer.save(
             seller=self.request.user, status=Listing.Status.PENDING_GRADING
         )
 
-    @action(detail=True, methods=["post"], url_path="evidence")
+    @action(detail=True, methods=["get", "post"], url_path="evidence")
     def upload_evidence(self, request, pk=None):
         listing = self.get_object()
+        if request.method == "GET":
+            return Response(
+                GradingEvidenceSerializer(
+                    listing.evidence.all(), many=True, context={"request": request}
+                ).data
+            )
         serializer = GradingEvidenceSerializer(
             data={**request.data, "listing": listing.id}
         )

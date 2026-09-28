@@ -236,3 +236,8 @@ FRONTEND_URL = env("FRONTEND_URL", "http://localhost:3000")
 # etc. via env vars for a real deployment.
 EMAIL_BACKEND = env("EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", "no-reply@msmemarketplace.local")
+
+# Firebase service-account JSON used to send FCM pushes
+# (notifications/fcm.py). Empty = push disabled; in-app notifications still
+# work. Never commit this file.
+FIREBASE_CREDENTIALS_FILE = env("FIREBASE_CREDENTIALS_FILE", "")

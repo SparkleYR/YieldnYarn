@@ -35,3 +35,38 @@ class Notification(models.Model):
 
     def __str__(self):
         return f"Notification<{self.user_id}:{self.type}>"
+
+
+class DeviceToken(models.Model):
+    """An FCM registration token for one of a user's devices.
+
+    Registered by the seller Android app on login and whenever Firebase
+    rotates the token (`POST /api/notifications/devices/`), and removed on
+    logout. A token belongs to one device, so re-registering an existing
+    token under a different account (shared phone, re-login) moves it rather
+    than duplicating it — otherwise the previous account would keep getting
+    this device's pushes.
+    """
+
+    class Platform(models.TextChoices):
+        ANDROID = "ANDROID", "Android"
+        IOS = "IOS", "iOS"
+        WEB = "WEB", "Web"
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="device_tokens",
+    )
+    token = models.CharField(max_length=512, unique=True)
+    platform = models.CharField(
+        max_length=10, choices=Platform.choices, default=Platform.ANDROID
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_seen_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "device_tokens"
+
+    def __str__(self):
+        return f"DeviceToken<{self.user_id}:{self.platform}>"

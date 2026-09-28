@@ -15,6 +15,12 @@ def _display_name(user):
 
 class ListingSerializer(serializers.ModelSerializer):
     seller = serializers.PrimaryKeyRelatedField(read_only=True)
+    # Declared explicitly because the model field is editable=False, which
+    # would otherwise make DRF treat it as read-only — but the offline-first
+    # seller app has to be able to send the UUID it generated locally so a
+    # retried sync maps onto the same row (see ListingViewSet.create). Only
+    # honored on create; ignored on update.
+    client_uuid = serializers.UUIDField(required=False)
     seller_name = serializers.SerializerMethodField()
     grade = serializers.SerializerMethodField()
     grade_confidence = serializers.SerializerMethodField()
@@ -46,6 +52,10 @@ class ListingSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         validated_data["seller"] = self.context["request"].user
         return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        validated_data.pop("client_uuid", None)
+        return super().update(instance, validated_data)
 
     def get_seller_name(self, listing):
         return _display_name(listing.seller)

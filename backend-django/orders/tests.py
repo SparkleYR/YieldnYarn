@@ -436,3 +436,138 @@ class BidViewSetTest(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(Order.objects.count(), 0)
+
+
+class CounterOfferTest(APITestCase):
+    """POST /api/orders/bids/{id}/counter/ and who may settle each offer."""
+
+    def setUp(self):
+        self.buyer = User.objects.create_user(email="buyer@example.com", password="pw12345", role="BUYER")
+        self.seller = User.objects.create_user(email="seller@example.com", password="pw12345", role="SELLER")
+        self.vertical = Vertical.objects.create(name="Agriculture", slug="agriculture", unit_of_measure="kg")
+        self.listing = Listing.objects.create(
+            seller=self.seller, vertical=self.vertical, commodity_name="Wheat",
+            quantity=100, unit="kg", status="ACTIVE",
+        )
+        self.client.force_authenticate(user=self.buyer)
+        response = self.client.post(
+            "/api/orders/bids/",
+            {"listing": self.listing.id, "offered_price": "2000.00", "offered_quantity": "40.00"},
+            format="json",
+        )
+        self.bid = Bid.objects.get(pk=response.data["id"])
+
+    def _counter(self, user, bid, **body):
+        self.client.force_authenticate(user=user)
+        return self.client.post(f"/api/orders/bids/{bid.id}/counter/", body, format="json")
+
+    def test_new_bid_records_the_buyer_as_proposer_and_awaits_the_seller(self):
+        self.assertEqual(self.bid.proposed_by_id, self.buyer.id)
+        response = self.client.get(f"/api/orders/bids/{self.bid.id}/")
+        self.assertEqual(response.data["awaiting_response_from"], "SELLER")
+        self.assertEqual(response.data["commodity_name"], "Wheat")
+
+    def test_seller_counter_marks_original_countered_and_creates_linked_bid(self):
+        response = self._counter(self.seller, self.bid, offered_price="2200.00", message="Best I can do")
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.bid.refresh_from_db()
+        self.assertEqual(self.bid.status, Bid.Status.COUNTERED)
+        counter = Bid.objects.get(pk=response.data["id"])
+        self.assertEqual(counter.parent_bid_id, self.bid.id)
+        self.assertEqual(counter.buyer_id, self.buyer.id)
+        self.assertEqual(counter.proposed_by_id, self.seller.id)
+        self.assertEqual(counter.offered_quantity, 40)  # defaults to the original's quantity
+        self.assertEqual(counter.status, Bid.Status.PENDING)
+        self.assertEqual(response.data["awaiting_response_from"], "BUYER")
+
+    def test_seller_counter_notifies_the_buyer(self):
+        response = self._counter(self.seller, self.bid, offered_price="2200.00")
+
+        notification = Notification.objects.filter(user=self.buyer).latest("created_at")
+        self.assertEqual(notification.type, Notification.Type.BID_RECEIVED)
+        self.assertEqual(notification.related_object_id, response.data["id"])
+        self.assertIn("2200", notification.message)
+
+    def test_buyer_cannot_counter_their_own_pending_bid(self):
+        response = self._counter(self.buyer, self.bid, offered_price="1900.00")
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.bid.refresh_from_db()
+        self.assertEqual(self.bid.status, Bid.Status.PENDING)
+
+    def test_cannot_counter_a_settled_bid(self):
+        self.bid.status = Bid.Status.REJECTED
+        self.bid.save(update_fields=["status"])
+
+        response = self._counter(self.seller, self.bid, offered_price="2200.00")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_buyer_accepts_sellers_counter_and_gets_an_order_at_the_counter_price(self):
+        counter_id = self._counter(self.seller, self.bid, offered_price="2200.00").data["id"]
+
+        self.client.force_authenticate(user=self.buyer)
+        response = self.client.patch(f"/api/orders/bids/{counter_id}/", {"status": "ACCEPTED"}, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        order = Order.objects.get()
+        self.assertEqual(order.buyer_id, self.buyer.id)
+        self.assertEqual(order.total_price, 2200 * 40)
+        self.listing.refresh_from_db()
+        self.assertEqual(self.listing.quantity, 60)
+        # The seller made the offer, so the seller hears that it was accepted.
+        notification = Notification.objects.filter(user=self.seller).latest("created_at")
+        self.assertEqual(notification.title, "Counter-offer accepted")
+
+    def test_seller_cannot_accept_their_own_counter(self):
+        counter_id = self._counter(self.seller, self.bid, offered_price="2200.00").data["id"]
+
+        self.client.force_authenticate(user=self.seller)
+        response = self.client.patch(f"/api/orders/bids/{counter_id}/", {"status": "ACCEPTED"}, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(Order.objects.count(), 0)
+
+    def test_buyer_can_counter_back_and_seller_then_accepts(self):
+        counter_id = self._counter(self.seller, self.bid, offered_price="2200.00").data["id"]
+        counter = Bid.objects.get(pk=counter_id)
+
+        response = self._counter(self.buyer, counter, offered_price="2100.00", offered_quantity="50.00")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["awaiting_response_from"], "SELLER")
+
+        self.client.force_authenticate(user=self.seller)
+        accept = self.client.patch(f"/api/orders/bids/{response.data['id']}/", {"status": "ACCEPTED"}, format="json")
+        self.assertEqual(accept.status_code, status.HTTP_200_OK)
+        self.assertEqual(Order.objects.get().total_price, 2100 * 50)
+
+    def test_accepting_more_than_the_remaining_quantity_is_rejected(self):
+        self.listing.quantity = 10
+        self.listing.save(update_fields=["quantity"])
+
+        self.client.force_authenticate(user=self.seller)
+        response = self.client.patch(f"/api/orders/bids/{self.bid.id}/", {"status": "ACCEPTED"}, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(Order.objects.count(), 0)
+
+    def test_seller_cannot_bid_on_their_own_listing(self):
+        self.client.force_authenticate(user=self.seller)
+        response = self.client.post(
+            "/api/orders/bids/",
+            {"listing": self.listing.id, "offered_price": "1.00", "offered_quantity": "1.00"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_cannot_bid_on_a_listing_that_is_not_active(self):
+        self.listing.status = "PENDING_VERIFICATION"
+        self.listing.save(update_fields=["status"])
+
+        response = self.client.post(
+            "/api/orders/bids/",
+            {"listing": self.listing.id, "offered_price": "2000.00", "offered_quantity": "5.00"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)

@@ -1,15 +1,18 @@
 import httpx
 from django.conf import settings
+from django.db import transaction
 from rest_framework import permissions, status, viewsets
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from catalog.models import Listing
 from core.permissions import IsBidPartyOrAdmin, IsOwnerOrAdmin
+from catalog.serializers import _display_name
 from notifications.models import Notification
 
 from .models import Bid, Order, Requirement
-from .serializers import BidSerializer, OrderSerializer, RequirementSerializer
+from .serializers import BidSerializer, CounterBidSerializer, OrderSerializer, RequirementSerializer
 
 
 class RequirementViewSet(viewsets.ModelViewSet):
@@ -117,8 +120,9 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
 
 class BidViewSet(viewsets.ModelViewSet):
     """
-    /api/orders/bids/       (list, create)
-    /api/orders/bids/{id}/  (retrieve, update [accept/reject/counter])
+    /api/orders/bids/                (list, create)
+    /api/orders/bids/{id}/           (retrieve, update [accept/reject])
+    /api/orders/bids/{id}/counter/   (POST -> counter-offer)
     """
 
     serializer_class = BidSerializer
@@ -127,7 +131,7 @@ class BidViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        qs = Bid.objects.select_related("listing", "buyer").all()
+        qs = Bid.objects.select_related("listing", "buyer", "buyer__profile").all()
         if user.is_superuser or user.role == "ADMIN":
             return qs
         if user.role == "BUYER":
@@ -135,3 +139,58 @@ class BidViewSet(viewsets.ModelViewSet):
         if user.role == "SELLER":
             return qs.filter(listing__seller=user)
         return qs.none()
+
+    @action(detail=True, methods=["post"], url_path="counter")
+    def counter(self, request, pk=None):
+        """Counter a PENDING offer with a new price (and optionally quantity).
+
+        Only the party whose move it is may counter — the seller on a
+        buyer's bid, the buyer on a seller's counter-offer — so the two sides
+        alternate. The original offer is marked COUNTERED and a new PENDING
+        bid is created, linked via `parent_bid`, with `proposed_by` set to
+        the caller; accepting *that* bid is then the other party's call
+        (enforced by BidSerializer.validate). The new bid always keeps the
+        original `buyer`, since that's who the eventual Order belongs to.
+        """
+        original = self.get_object()
+        if original.status != Bid.Status.PENDING:
+            return Response(
+                {"detail": f"Only a pending offer can be countered (this one is {original.status})."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if original.responder_id != request.user.id:
+            raise PermissionDenied("Only the party responding to this offer can counter it.")
+
+        serializer = CounterBidSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        with transaction.atomic():
+            original.status = Bid.Status.COUNTERED
+            original.save(update_fields=["status"])
+            counter_bid = Bid.objects.create(
+                listing=original.listing,
+                buyer=original.buyer,
+                proposed_by=request.user,
+                parent_bid=original,
+                offered_price=data["offered_price"],
+                offered_quantity=data.get("offered_quantity", original.offered_quantity),
+                message=data.get("message", ""),
+            )
+            Notification.objects.create(
+                user_id=original.proposer_id,
+                type=Notification.Type.BID_RECEIVED,
+                title="Counter-offer received",
+                message=(
+                    f"{_display_name(request.user)} countered with ₹{counter_bid.offered_price} for "
+                    f"{counter_bid.offered_quantity} {original.listing.unit} of "
+                    f"{original.listing.commodity_name}."
+                ),
+                related_object_type="bid",
+                related_object_id=counter_bid.id,
+            )
+
+        return Response(
+            BidSerializer(counter_bid, context=self.get_serializer_context()).data,
+            status=status.HTTP_201_CREATED,
+        )

@@ -145,6 +145,18 @@ class Bid(models.Model):
         blank=True,
         related_name="counter_bids",
     )
+    # Who put this offer on the table. The buyer for an original bid; either
+    # party for a counter-offer (a seller countering a buyer's bid, or the
+    # buyer countering back). Nullable because rows created before the
+    # counter-offer workflow existed have no value — those were always
+    # buyer-proposed, which `proposer_id` below falls back to.
+    proposed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="proposed_bids",
+    )
     message = models.TextField(blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -154,3 +166,13 @@ class Bid(models.Model):
 
     def __str__(self):
         return f"Bid<{self.listing_id}:{self.buyer_id}:{self.status}>"
+
+    @property
+    def proposer_id(self):
+        return self.proposed_by_id or self.buyer_id
+
+    @property
+    def responder_id(self):
+        """The party whose move it is: whoever did *not* make this offer."""
+        seller_id = self.listing.seller_id
+        return seller_id if self.proposer_id == self.buyer_id else self.buyer_id

@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import Notification
+from .models import DeviceToken, Notification
 
 
 class NotificationSerializer(serializers.ModelSerializer):
@@ -24,3 +24,14 @@ class NotificationSerializer(serializers.ModelSerializer):
             "fcm_sent",
             "created_at",
         ]
+
+
+class DeviceTokenSerializer(serializers.Serializer):
+    token = serializers.CharField(max_length=512)
+    platform = serializers.ChoiceField(
+        choices=DeviceToken.Platform.choices, default=DeviceToken.Platform.ANDROID
+    )
+
+
+class DeviceTokenUnregisterSerializer(serializers.Serializer):
+    token = serializers.CharField(max_length=512)

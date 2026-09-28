@@ -242,3 +242,36 @@ class PasswordResetTest(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+class MeUpdateTest(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(email="me@example.com", password="pw12345678", role="SELLER")
+        self.client.force_authenticate(user=self.user)
+
+    def test_patch_updates_phone_and_profile(self):
+        response = self.client.patch(
+            "/api/auth/me/",
+            {"phone": "+919800000000", "profile": {"display_name": "Ramesh Farms", "preferred_language": "hi"}},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["phone"], "+919800000000")
+        self.assertEqual(response.data["profile"]["display_name"], "Ramesh Farms")
+        self.assertEqual(response.data["profile"]["preferred_language"], "hi")
+
+    def test_patch_creates_a_missing_profile(self):
+        response = self.client.patch(
+            "/api/auth/me/", {"profile": {"location_lat": 26.9, "location_lng": 75.8}}, format="json"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["profile"]["location_lat"], 26.9)
+
+    def test_role_and_email_cannot_be_changed(self):
+        self.client.patch("/api/auth/me/", {"role": "ADMIN", "email": "evil@example.com"}, format="json")
+
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.role, "SELLER")
+        self.assertEqual(self.user.email, "me@example.com")

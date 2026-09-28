@@ -1,7 +1,10 @@
+import tempfile
 from unittest.mock import MagicMock, patch
 
 import httpx
 from django.contrib.auth import get_user_model
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import override_settings
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -521,3 +524,96 @@ class VerificationReviewViewTest(APITestCase):
         response = self.client.post(self.url, {"decision": "APPROVE"}, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp(prefix="msme-test-media-"))
+class OfflineSyncCreateTest(APITestCase):
+    """Idempotent listing creation for the offline-first seller app (§8.3)."""
+
+    def setUp(self):
+        self.seller = User.objects.create_user(email="sync-seller@example.com", password="pw12345", role="SELLER")
+        self.other_seller = User.objects.create_user(email="sync-other@example.com", password="pw12345", role="SELLER")
+        self.vertical = Vertical.objects.create(name="Agriculture", slug="agriculture", unit_of_measure="quintal")
+        self.payload = {
+            "client_uuid": "7f1d6c1e-3a52-4b8e-9f3c-2d8a1b0c9e11",
+            "vertical": self.vertical.id,
+            "commodity_name": "Wheat",
+            "quantity": "25.00",
+            "unit": "quintal",
+        }
+
+    def test_client_uuid_from_the_device_is_stored(self):
+        self.client.force_authenticate(user=self.seller)
+
+        response = self.client.post("/api/catalog/listings/", self.payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["client_uuid"], self.payload["client_uuid"])
+        self.assertEqual(response.data["status"], Listing.Status.PENDING_GRADING)
+
+    def test_retried_sync_returns_the_existing_listing_instead_of_a_duplicate(self):
+        self.client.force_authenticate(user=self.seller)
+        first = self.client.post("/api/catalog/listings/", self.payload, format="json")
+
+        retry = self.client.post("/api/catalog/listings/", self.payload, format="json")
+
+        self.assertEqual(retry.status_code, status.HTTP_200_OK)
+        self.assertEqual(retry.data["id"], first.data["id"])
+        self.assertEqual(Listing.objects.filter(client_uuid=self.payload["client_uuid"]).count(), 1)
+
+    def test_another_sellers_uuid_is_rejected_without_leaking_their_listing(self):
+        self.client.force_authenticate(user=self.seller)
+        self.client.post("/api/catalog/listings/", self.payload, format="json")
+
+        self.client.force_authenticate(user=self.other_seller)
+        response = self.client.post("/api/catalog/listings/", self.payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertNotIn("commodity_name", response.data)
+
+    def test_client_uuid_is_optional(self):
+        self.client.force_authenticate(user=self.seller)
+        payload = {k: v for k, v in self.payload.items() if k != "client_uuid"}
+
+        response = self.client.post("/api/catalog/listings/", payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(response.data["client_uuid"])
+
+    def test_malformed_client_uuid_is_a_validation_error(self):
+        self.client.force_authenticate(user=self.seller)
+
+        response = self.client.post(
+            "/api/catalog/listings/", {**self.payload, "client_uuid": "not-a-uuid"}, format="json"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("client_uuid", response.data)
+
+    def test_client_uuid_cannot_be_changed_by_an_update(self):
+        self.client.force_authenticate(user=self.seller)
+        created = self.client.post("/api/catalog/listings/", self.payload, format="json")
+
+        self.client.patch(
+            f"/api/catalog/listings/{created.data['id']}/",
+            {"client_uuid": "11111111-1111-4111-8111-111111111111"},
+            format="json",
+        )
+
+        listing = Listing.objects.get(pk=created.data["id"])
+        self.assertEqual(str(listing.client_uuid), self.payload["client_uuid"])
+
+    def test_owner_can_list_evidence(self):
+        listing = Listing.objects.create(
+            seller=self.seller, vertical=self.vertical, commodity_name="Rice", quantity=5, unit="quintal"
+        )
+        GradingEvidence.objects.create(
+            listing=listing, file=SimpleUploadedFile("grain.jpg", b"jpeg-bytes"), file_type="IMAGE"
+        )
+        self.client.force_authenticate(user=self.seller)
+
+        response = self.client.get(f"/api/catalog/listings/{listing.id}/evidence/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data[0]["file_type"], "IMAGE")

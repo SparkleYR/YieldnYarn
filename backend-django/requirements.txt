@@ -9,3 +9,6 @@ django-filter>=24.0
 gunicorn>=23.0
 python-dotenv>=1.0
 httpx>=0.28
+# FCM push (notifications/fcm.py). Imported lazily; only used when
+# FIREBASE_CREDENTIALS_FILE is set.
+firebase-admin>=6.5
