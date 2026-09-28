@@ -32,21 +32,21 @@ This is a **single-phase, in-depth implementation plan** covering the entire pro
 > [!NOTE]
 > **Last audited: 2026-09-28.** This section is a snapshot, not a living dashboard — re-verify against the codebase before trusting it if much time has passed.
 
-The general shape of where the project stands: both backends and the web app are complete and wired end to end; the **Kotlin seller app now exists** (§8), with its networking/offline-sync core tested on the JVM and against the live backend, while its Android UI module is only compiled by CI (this dev environment can't reach Google's Maven/SDK hosts); the **ML pipeline is code-complete for training and serving** (§9) but has **no trained weights yet** — collecting labeled data and training need the GPU machine.
+The general shape of where the project stands (final pass, 2026-09-28): both backends and the web app are complete, wired end to end, containerized, and verified together as production images (`docker compose --profile app up`); the **Kotlin seller app** exists (§8) and CI compiles it; the **ML pipeline has trained graders for both launch verticals** (§9), trained on public datasets and calibrated, but they are assistive only: their confidence is capped below the verification threshold, so a human verifier still confirms every grade until they are retrained on verified marketplace photos. **Azure deployment is fully scripted** (§11: Bicep + a manual GitHub Actions deploy) and only waits on an Azure subscription. Push notifications are wired but intentionally left off (no Firebase project).
 
 | # | Section | Status | One-line summary |
 |---|---|---|---|
 | 1 | System Dependencies & Env Setup | 🟡 Mostly done | Django/FastAPI venvs + Node/pnpm done. The seller app uses the Gradle wrapper (8.14.3) + Android Studio's SDK; no system Kotlin install needed. |
-| 2 | Monorepo Scaffold & DevOps | 🟡 Mostly done | `docker-compose.yml` and 4 GitHub Actions workflows exist and match the plan; directory structure matches except a naming detail in §2.1 (now corrected below). |
+| 2 | Monorepo Scaffold & DevOps | ✅ Complete | Compose runs Postgres alone for dev, or the whole stack from production images (`--profile app`). CI: lint + tests for both backends (FastAPI with CPU torch against the committed graders), web lint/types/Vitest, seller-app build, OpenAPI drift checks, Docker image builds, manual Azure deploy. |
 | 3 | Database Design | ✅ Complete | All 8 Django apps' models implemented, migrated, and applied against a live Postgres. |
-| 4 | Backend — Django | 🟡 Mostly complete | All apps + endpoints built, RBAC working, JWT auth working. Grading-trigger → FastAPI call is now wired (§4.3); FCM push dispatch remains a stub (needs real Firebase credentials this environment doesn't have). `accounts` gained an admin user-management endpoint (`AdminUserViewSet`) and a platform-stats endpoint (`AdminStatsView`, §12); `catalog` gained a real letter-grade derivation + an enriched `VerificationQueueView` and a `grade`/`seller_name` on `ListingSerializer`; `orders` gained a free-text `Requirement.region` field and denormalized `commodity_name`/`unit`/`seller_name` on `OrderAllocationSerializer`; `disputes` gained denormalized `raised_by_name`/`against_name` — all beyond the original plan, all driven by real frontend wiring needs (§12). **All 8 apps now have test coverage — 102 tests total** (was 21, 2 apps). Found and fixed three real bugs along the way (§12): `IsOwnerOrAdmin` excluded disputes' `against` party from retrieve/update despite the queryset including them in list; grading never advanced `Listing.status`, so a listing could never actually reach the verification queue or a buyer's catalog; accepting a bid never created an `Order`, and any buyer could accept their own bid unilaterally. The notification pipeline (list/read endpoints, FCM-dispatch signal) is now also actually fed by real events — bid placed/accepted/rejected, dispute status changes, grading completing, verifier decisions — rather than being entirely passive. |
-| 5 | Backend — FastAPI | 🟡 Partial | Pricing + matching are real and tested, and now include real letter-grade derivation (`grading/grade.py`, §12) and real haversine-distance geo-radius matching (`matching/allocation.py`, §12) — grade-adjustment pricing, `min_grade` matching, and `search_radius_km` filters all actually work end-to-end. **The matching engine is now actually reachable, too** — `POST /compute/matching/allocate` existed, was tested at the pure-function level, and was never once called by anything until this pass wired `orders/views.py:RequirementViewSet.trigger_match` to call it (§12); it also now correctly decrements the `Listing`s it allocates from (previously didn't, so the same stock could be "matched" repeatedly). Grading itself still runs an interim OpenCV heuristic, not real ML inference. `ingest_agmarknet_prices` scheduler job is a stub (real integration needs the actual Agmarknet API docs, not a guess). **`grading/`, `pricing/`, `scheduler/`, and `matching/router.py` now have test coverage — 44 tests total** (was 14, 2 modules). Writing them surfaced and fixed ~10 real `db.py` SQLAlchemy-vs-Postgres schema drift bugs (missing/wrongly-nullable columns) that had never been hit because nothing FastAPI-side had inserted through those models before; the same class of bug was proactively avoided for the new `Requirement.region` column this pass. |
+| 4 | Backend — Django | ✅ Complete | All apps and endpoints, RBAC, JWT with a rotating httpOnly refresh cookie for the web (blacklisted on rotation/logout), OpenAPI at `/api/schema/` + Swagger at `/api/docs/`, `seed_verticals` for fresh databases, Azure Blob storage/whitenoise/Sentry for production. FCM dispatch is implemented but off until a Firebase key is supplied. 162 tests. |
+| 5 | Backend — FastAPI | ✅ Complete | Grading (trained vertical graders, OpenCV proxy fallback), pricing, matching and the Agmarknet ingestion job (data.gov.in; public sample key until a real key is set). Grading/matching require `X-Internal-Token` from Django whenever `COMPUTE_INTERNAL_TOKEN` is set; pricing stays public. 81 tests (5 need the ML stack; CI installs it). |
 | 6 | Frontend — Marketing/Landing | ✅ Complete | All 5 pages built per the section-by-section clone plan. |
 | 7 | Frontend — Application Pages | ✅ Fully wired to real data | Auth is real (hits Django JWT). Every admin/verifier page (pricing, verticals, users, verification queue, dashboard, disputes) and every buyer page (dashboard, catalog list/detail, requirements + post-requirement dialog, orders, notifications, Buy Now/Place a Bid, cost estimator) now reads and writes through real Django/FastAPI endpoints (§12) — verified end-to-end in a real browser against live Postgres for every flow (bid creation, requirement posting with the new region field, notification read-state, dispute resolve/escalate, admin stats, grade/quantity-adjusted cost estimates). `lib/mock-data.ts` no longer exists — nothing in the app reads from it anymore. Also gained a real `/forgot-password`→`/reset-password` flow and a global Command palette (⌘K, §12) — the latter's own E2E test caught a real bug where sellers could never actually log into the web UI at all (infinite loading skeleton, fixed). |
 | 8 | Seller Mobile App (Kotlin) | 🟡 Built, awaiting first device run | `seller-app/`: `:core` (API client, JWT refresh, offline sync engine, validation — 32 JVM tests + a live-backend test that passes against real Django/FastAPI) and `:app` (Compose UI for all 9 §8.2 screens, Hilt, Room, WorkManager, FCM, English/Hindi). `:app` has not been compiled in the dev environment (Google Maven blocked); `.github/workflows/seller-app.yml` builds it on GitHub's Android runners. |
-| 9 | ML Grading Pipeline | 🟡 Code-complete, untrained | Shared model/checkpoint module, real train/eval scripts, a verified-data exporter, and serving of per-attribute MobileNetV3 checkpoints in FastAPI (verified with a real randomly-initialized model). Missing: a labeled dataset and a training run on the GPU machine. YOLOv8n detection not wired. |
-| 10 | Integration, Testing & Polish | 🟡 Core paths integrated and tested | Every role's core flow is integrated end-to-end (§7), including both real paths into an `Order` now — direct bid acceptance and requirement-based matching — plus a real password-reset flow and a working seller login (previously broken, see below). Test coverage (2026-09-28): 150 Django tests, 66 FastAPI tests (3 of them need requirements-ml.txt and skip without it), 26 Vitest tests, 16 Playwright E2E tests across 7 specs, and 32 seller-app `:core` JVM tests plus one opt-in live-backend test. The Playwright suite drives real multi-role flows through actual browser UI and has caught **six** real bugs across three passes: grading never advancing listing status; bid acceptance never creating an order (plus a missing seller-only permission check on it); the matching engine never being called at all, and never decrementing what it allocated; a verifier's "Confirm AI Grade" silently blanking a listing's `attribute_scores`; and — the most serious one — sellers being unable to log into the web app at all (an infinite loading skeleton from a role-check bug in `app/buyer/layout.tsx`, never caught before because no test had ever driven a seller's UI login, only their API token). The notification pipeline now has real trigger points (bid/dispute/grading/verification/matching events) instead of being entirely passive. Performance validation (§10.3) still not started — no real traffic/data to measure against yet. |
-| 11 | Azure Production Migration | ⬜ Not started (by design) | Correctly deferred — untouched until local dev is complete, per the plan's own instruction. |
+| 9 | ML Grading Pipeline | 🟡 Trained on public data, assistive | Wheat kernel grader (AgroAI) and fabric patch grader (TILDA), each with a decision threshold calibrated on held-out photos. Sample-level results in `ml-training/reports/`. Confidence is capped at validated balanced accuracy (0.58 / 0.57), so every AI grade still goes to a verifier; retrain on `export_verified_dataset.py` output to lift that. YOLOv8n not used (per-item classification covers the same job). |
+| 10 | Integration, Testing & Polish | ✅ Complete for launch | 162 Django, 81 FastAPI, 34 Vitest, 19 Playwright (run against the production containers), 32 seller-app JVM tests; OpenAPI drift checks in CI. English/Hindi web UI. §10.3 targets met on the compose stack (catalog P95 ≤ 73 ms, grading trigger P95 173 ms, grader inference 125–170 ms/photo on CPU) — see §10.3. |
+| 11 | Azure Production Migration | 🟡 Scripted, not yet deployed | `infra/azure/main.bicep` (Container Apps ×3, Postgres Flexible B1ms, Blob Storage, Log Analytics) + `.github/workflows/deploy-azure.yml`. Needs an Azure subscription and the secrets listed in `infra/azure/README.md`. |
 
 ---
 
@@ -1027,7 +1027,12 @@ dependencies {
 
 ## 9. ML Grading Pipeline
 
-> **Status:** 🟡 Code-complete; no trained weights yet (training needs the GPU machine and a labeled dataset).
+> **Status (2026-09-28):** 🟡 Trained on public datasets; assistive, not autonomous.
+> - **Graders, not per-attribute models.** `checkpoints/<vertical>/grader.pt` holds a MobileNetV3-Small (timm) plus an `analysis` block. Agriculture segments the kernels in a photo and classifies each one (sound / damaged / foreign / husk-covered). Textiles tiles the photo into 64 px patches (good / hole / object / oil spot / thread error). Attribute scores come from the share of bad items; see `grading_model.py`.
+> - **Data:** AgroAI wheat kernel crops (github.com/sachin235/AgroAI, no licence file, so ask the author before commercial use) and TILDA-400 in YOLO format (github.com/sivasgitt/AI-Fabric-Defect-Detection). Kaggle, Hugging Face and Zenodo were unreachable from this environment. `prepare_public_datasets.py` rebuilds everything, split by source photo so validation never shares a photo with training.
+> - **Results** (`ml-training/reports/`): wheat item-level balanced accuracy 0.58. On synthetic sample photos built from held-out kernels, the foreign-matter share error is 0.026 and damaged-kernel error is 0.125; damaged kernels are under-detected. Fabric item-level balanced accuracy 0.57; at the calibrated 2% false-alarm rate, patch-level defect precision is 0.85 and recall 0.40.
+> - **Serving:** FastAPI loads graders on first use and hot-reloads them when the file changes. Confidence is capped at the checkpoint's validated balanced accuracy, so every AI grade is routed to a verifier. The `export_verified_dataset.py` → `train_classifier.py` → `evaluate_grader.py --calibrate-false-alarm … --write` loop retrains them on real, verified marketplace photos.
+> - Two serving bugs were found and fixed during evaluation. First, the dynamic module loader broke on `@dataclass`, so graders silently never loaded. Second, a double erosion of segmented kernels made sound kernels look broken. CI now runs the grader tests with CPU torch against the committed checkpoints.
 > - `ml-training/scripts/grading_model.py` defines the network, input transforms, and checkpoint format **once**, and both training and serving load it, so the two can't drift apart.
 > - `export_verified_dataset.py` turns verifier-confirmed listings into the `data/<vertical>/<attribute>/<bucket>/` layout; `train_classifier.py` (stratified val split, keeps the best checkpoint) writes `checkpoints/<vertical>/<attribute>.pt`; `evaluate.py` reports accuracy, the confusion matrix, and how much would still be routed to verifiers at the 80% threshold. A CPU smoke run on synthetic images exercised all three end to end. That was not real training.
 > - `backend-fastapi/grading/classifier.py` serves any checkpoint it finds, per attribute, with a hot reload on file change. Attributes without a checkpoint keep the OpenCV proxy, so models can roll out one attribute at a time. Verified with a real (randomly initialized) MobileNetV3 checkpoint. Evidence paths are now resolved against Django's `MEDIA_ROOT`; before this, FastAPI was handed relative paths it could never open.
@@ -1109,20 +1114,20 @@ def preprocess_evidence(image_path: str) -> dict:
 
 ## 10. Integration, Testing & Polish
 
-> **Status:** ⬜ Mostly not started. Only the auth flow is integrated end-to-end (frontend → Django JWT). Test coverage across the whole project is thin — see §10.2 for exact counts. No Vitest, Playwright, or ML test suite exists yet.
+> **Status (2026-09-28):** ✅ Every flow is integrated end to end and covered at every layer; §10.3 targets were measured and met on the production images.
 
 ### 10.1 API Integration (Frontend ↔ Backend)
 
-> **Status:** 🟡 Partial, and diverges from plan on JWT storage. `lib/api.ts` is built and generic (fetch-based, `djangoApi`/`fastApi` wrappers) but **only auth endpoints are wired through it** (`login`, `register`, `getCurrentUser`) — no listings/orders/verticals/pricing calls exist yet, despite the client being ready for them.
+> **Status:** ✅ Complete. `lib/api.ts` covers every Django and FastAPI endpoint the UI uses, surfaces DRF error bodies (`readableError`), and on a 401 refreshes once and retries.
 
-- **API client:** ✅ Built — `lib/api.ts`, fetch-based (not Axios), `djangoApi`/`fastApi` typed wrappers. Only auth calls actually go through it today.
-- **JWT management:** 🟡 Diverges from plan. Tokens are stored in `localStorage` (`lib/auth.ts`), not "access token in memory, refresh token in httpOnly cookie" as originally planned — an explicit, in-code-documented dev-only tradeoff. Moving to an httpOnly refresh cookie is tracked in §12.
+- **API client:** ✅ `lib/api.ts`, fetch-based, typed `djangoApi`/`fastApi` wrappers.
+- **JWT management:** ✅ As designed. The access token lives in `localStorage` (short-lived); the refresh token is an httpOnly, rotating, blacklist-on-rotation cookie (`msme_refresh`, path `/api/auth/`) that the web app opts into with `X-Auth-Mode: cookie`. The Android app keeps body tokens. `e2e/session-and-language.spec.ts` covers expiry → silent refresh and logout → revoked cookie.
 - **Error handling:** 🟡 Partial — `sonner` toasts are used ad hoc on individual pages for mock-action feedback; no global error boundary yet.
 - **Loading states:** 🟡 Partial — `Skeleton` components are used for the auth-gating layout shells (buyer/admin/verifier layouts show a skeleton while checking the session), but not systematically across every data-fetching surface (most of which is still synchronous mock data, so there's nothing to load yet).
 
 ### 10.2 Testing Strategy
 
-> **Status:** ⬜ Far below target across every layer. Actual counts as of this audit:
+> **Status (2026-09-28):** ✅ Every layer has a real suite; the table below is the original baseline audit, kept for history. Current counts: Django 162, FastAPI 81, Vitest 34, Playwright 19 (8 specs), seller-app `:core` 32. API contracts: `docs/api/openapi-*.{yaml,json}` generated with `--fail-on-warn` and drift-checked in CI. ML: `evaluate_grader.py` sample-level reports.
 
 | Layer | Tool | Coverage Target | Actual |
 |---|---|---|---|
@@ -1140,26 +1145,38 @@ def preprocess_evidence(image_path: str) -> dict:
 - **ML inference:** < 100ms per image on GPU, < 500ms on CPU
 - **Offline sync:** < 30s to sync 10 listings on reconnect
 
+**Measured 2026-09-28**. Production images via `docker compose --profile app`, gunicorn with 3 workers, 10 concurrent clients, 400 requests per endpoint, a 4-vCPU sandbox. Script: `infra/loadtest/loadtest.py`. Raw results: `docs/perf/loadtest-compose-2026-09-28.json`.
+
+| Endpoint | P50 | P95 | Target |
+|---|---|---|---|
+| Catalog list (seller, 20/page) | 54 ms | 69 ms | < 200 ms ✅ (was 323 ms before removing an N+1: three queries per listing) |
+| Catalog search + filter | 52 ms | 73 ms | < 200 ms ✅ |
+| Listing detail | 37 ms | 48 ms | < 200 ms ✅ |
+| Grading trigger (Django → FastAPI → DB, lite image) | 134 ms | 173 ms | < 500 ms ✅ |
+| Grader inference per photo, CPU (wheat ~60 kernels / fabric 96 patches) | 125–170 ms | — | < 500 ms ✅ |
+
+Grading with the ML image costs roughly trigger plus inference, about 350 ms per photo. The landing page (LCP/CLS) and offline sync were not measured here; they need a real browser on a real network and a device.
+
 ---
 
 ## 11. Azure Production Migration (Phase 7)
 
-> **Status:** ⬜ Not started — correctly so. Local development is not yet complete end-to-end (§7, §9, §10), so this phase should stay untouched per its own gating note below.
+> **Status (2026-09-28):** 🟡 Scripted and validated locally (`bicep build` clean, images built, stack smoke-tested and load-tested in compose); the first real deployment waits on an Azure subscription. See `infra/azure/README.md`.
 
 > [!NOTE]
 > This entire section is deferred until all local development is complete and working end-to-end. The $100 Azure student credit is not touched until this phase.
 
 ### 11.1 Migration Checklist
 
-- [ ] Swap PostgreSQL Docker → Azure Database for PostgreSQL Flexible Server (Burstable B1MS)
-- [ ] Swap local disk → Azure Blob Storage via `django-storages` (settings change only)
-- [ ] Deploy Django + FastAPI to Azure Container Apps (Consumption plan)
-- [ ] Write Bicep/Terraform IaC in `infra/`
-- [ ] Validate ML model CPU inference latency in container
-- [ ] Add deploy workflows to GitHub Actions
-- [ ] Add Sentry for error tracking
-- [ ] Configure custom domain + SSL
-- [ ] Load testing with realistic data volumes
+- [x] Swap PostgreSQL Docker → Azure Database for PostgreSQL Flexible Server (Burstable B1MS) — in Bicep, `sslmode=require`
+- [x] Swap local disk → Azure Blob Storage via `django-storages` (`AZURE_ACCOUNT_NAME`); FastAPI fetches evidence with a read-only SAS
+- [x] Django + FastAPI + web on Azure Container Apps (Consumption plan) — defined; FastAPI pinned to 1 replica (it runs the scheduler)
+- [x] Bicep IaC in `infra/azure/main.bicep`
+- [x] Validate ML CPU inference latency (125–170 ms/photo, §10.3); the ML image's grader load is checked in `docker-build.yml`
+- [x] Deploy workflow (`deploy-azure.yml`, manual, OIDC login, GHCR images) + Docker build CI
+- [x] Sentry in both backends (`SENTRY_DSN`)
+- [ ] Configure custom domain + SSL (needs a domain; Container Apps issues managed certificates)
+- [x] Load testing (compose stack, §10.3); repeat against Azure with `infra/loadtest/loadtest.py --api https://…`
 
 ### 11.2 Cost Projection
 
@@ -1228,14 +1245,14 @@ Consolidated from every ⚠️/🟡/⬜ marker above, grouped by area. File path
   - `package.json` gained `test` / `test:watch` / `test:ui` / `test:e2e` scripts. Both suites verified green on repeated runs (Playwright run twice back-to-back to rule out flakiness from parallel workers using shared dev-DB state).
 - [x] Command palette (⌘K) (§7.5). `components/ui/command.tsx` — the standard shadcn `Command`/`CommandDialog` primitives, hand-written against the already-installed `cmdk` package rather than run through the `shadcn` CLI (its `add` command wanted to overwrite existing components interactively, which isn't safe to answer blind — declined, and removed the one stray unrelated `cn` package it had already added before aborting). `components/shared/command-palette.tsx` mounts once in `DashboardLayout` (shared by all three role shells), listens globally for Ctrl/Cmd+K, and lists the current role's real `navItems` plus a "Log out" action — no hardcoded per-role duplication. New Playwright spec `e2e/command-palette.spec.ts` (3 tests: open+navigate, toggle-closes, log-out-clears-session-for-real) drives it through actual keyboard input, not a click shortcut.
   - **Writing that spec caught a fifth real bug, more serious than the others**: logging in as a **SELLER** through the real UI hung on an infinite loading skeleton forever. `app/buyer/layout.tsx` only accepted `user.role === "BUYER"`; anyone else got `router.replace(dashboardPathForRole(user.role))` — but `dashboardPathForRole("SELLER")` returns `/buyer/dashboard` (by design: "sellers share the buyer console shell", there's no separate seller web UI). That's a redirect to the exact URL already loaded, so the effect fires, does nothing observable, and the role check never passes — the skeleton never resolves. This is a **pre-existing bug, not something introduced this pass** — nothing in this project's own test suite had ever logged in as a SELLER through the actual browser UI before (`e2e/marketplace-lifecycle.spec.ts` only uses a seller's token via the API for setup, never drives their UI login), so it had never been caught. Fixed: `app/buyer/layout.tsx` now accepts both `BUYER` and `SELLER` (`ADMIN`/`VERIFIER` layouts were checked too — both are single-role with no aliasing in `dashboardPathForRole`, so they were never at risk of this).
-- [ ] `next-i18next` (Hindi/English) — not yet installed; part of the deferred Phase F7 polish (§6.7). Deliberately not attempted this pass — real i18n means translating copy across ~20 pages, which deserves its own dedicated pass rather than a rushed partial pass alongside everything else here.
+- [x] Hindi/English web UI: a small typed dictionary provider (`lib/i18n/`) instead of `next-i18next`, since the UI is client-rendered and needs no locale routing. It adds Noto Sans Devanagari and a switcher on the auth pages and in the buyer header, remembered per browser. Auth pages and the buyer portal are translated; the admin/verifier consoles stay in English (internal staff).
 - [x] `/forgot-password` page (§7.1), plus `/reset-password` (not separately tracked before, but required to make the former actually work). Real backend, not a stub: `accounts/views.py:PasswordResetRequestView`/`PasswordResetConfirmView` using Django's own `default_token_generator` (the same primitive the stock HTML `PasswordResetView` uses) exposed as a JSON API, with real enumeration protection (always 200, identical response, whether or not the email exists). No SMTP credentials exist in this environment, so `EMAIL_BACKEND` defaults to Django's console backend (env-overridable for a real deployment) — a real, standard Django dev pattern, not a fake shortcut: the actual `send_mail()` code path runs, it just writes to stdout instead of an SMTP server. New settings: `FRONTEND_URL` (for building the reset link, mirroring the existing `FASTAPI_BASE_URL` pattern), `EMAIL_BACKEND`, `DEFAULT_FROM_EMAIL`. 6 new Django tests (`accounts/tests.py:PasswordResetTest`) cover the real email being sent with a working link, enumeration protection, a valid token actually changing the password (and then logging in with it), an invalid token being rejected without a 500, a garbage (non-base64) uid being rejected cleanly, and Django's built-in token-reuse protection (the token generator hashes in the password, so it auto-invalidates once used — confirmed for real, not assumed). Frontend: `app/(auth)/forgot-password/page.tsx`, `app/(auth)/reset-password/page.tsx` (reads `?uid=&token=` from the query string; shows a real "Invalid reset link" state rather than a broken form when they're missing), a "Forgot password?" link added to the login page. New Playwright spec `e2e/password-reset.spec.ts` (5 tests) drives the real request flow against the real backend end-to-end, and the confirm page's real error handling for a bad/forged token — deliberately not scraping the dev-server log for a real token to test the happy confirm path, since that log path isn't a stable enough convention across environments for a committed spec to depend on (the Django-side test suite already covers the real token lifecycle exhaustively). Verified once more directly via `curl` outside the test suite too: a real email materialized in the console log with a working link, confirming with the real extracted uid/token changed the password, and logging in with the new password succeeded.
-- [ ] Move session storage off `localStorage` to an httpOnly refresh cookie issued by Django (per §10.1's original design intent). Not attempted this pass — more architecturally invasive than the above (needs a new Django cookie-issuing/refresh endpoint, CSRF handling, and touches every authenticated fetch call in the frontend), and didn't want to rush it alongside everything else here.
+- [x] Move the refresh token off `localStorage` into an httpOnly, rotating refresh cookie issued by Django, with logout blacklisting (§10.1).
 
 ### ML Pipeline
-- [ ] Collect a labeled dataset (target 200+ images/class/vertical per §9.3) under `ml-training/data/<vertical>/<attribute>/<class>/`. `scripts/export_verified_dataset.py` now builds this from verifier-confirmed listings.
-- [ ] Run `ml-training/scripts/train_classifier.py` on the GPU machine once data exists. The script was rewritten and smoke-tested; see ml-training/README.md for the workflow.
-- [ ] Install `requirements-ml.txt` (torch/opencv/ultralytics) in the FastAPI environment.
+- [x] Public labeled datasets (AgroAI wheat, TILDA fabric) via `prepare_public_datasets.py`. **Still wanted:** real marketplace photos confirmed by verifiers (`export_verified_dataset.py`) — the original target of 200+ images/class/vertical per §9.3 under `ml-training/data/<vertical>/<attribute>/<class>/`. `scripts/export_verified_dataset.py` now builds this from verifier-confirmed listings.
+- [x] Trained both graders on CPU (MobileNetV3-Small, ~15 min each). Retraining on verified photos is the next step; a GPU is optional. The script was rewritten and smoke-tested; see ml-training/README.md for the workflow.
+- [x] ML stack in the FastAPI image (`WITH_ML=true`, CPU torch) and in CI.
 - [x] MobileNetV3-Small inference in `backend-fastapi/grading/` (classifier.py): used automatically for any attribute with a checkpoint, with the heuristic as a per-attribute fallback. (YOLOv8n detection still not wired.)
 
 ### Seller Mobile App
@@ -1244,9 +1261,9 @@ Consolidated from every ⚠️/🟡/⬜ marker above, grouped by area. File path
 - [ ] Create a Firebase project and add `seller-app/app/google-services.json` + `FIREBASE_CREDENTIALS_FILE` to turn on push.
 
 ### Testing / Polish
-- [ ] Full §10.2 test-layer buildout across all five layers (Django, FastAPI, ML, React, E2E).
-- [ ] Validate against §10.3 performance targets once there's real traffic/data to measure against.
-- [ ] Add an OpenAPI schema validation step to CI once more endpoints are frontend-wired.
+- [x] Test suites at every layer (§10.2).
+- [x] §10.3 API + inference targets measured and met (compose stack). Re-run on Azure after the first deploy.
+- [x] OpenAPI schemas for both backends, validated and drift-checked in CI.
 
 ---
 

@@ -1,19 +1,18 @@
 """ML grading pipeline (implementation_plan.md §9).
 
-Lazily imports the heavy ML stack (opencv-python, torch, torchvision,
-ultralytics, numpy — see requirements-ml.txt) so the base service stays fast
-to install and boots cleanly without them. When unavailable, grading falls
-back to a deterministic stub result (clearly logged) so the rest of the
-system — DB writes, verification-queue routing, API contracts — can still be
-exercised end-to-end without the ML dependencies installed.
+Lazily imports the heavy ML stack (torch, timm, opencv, numpy — see
+requirements-ml.txt) so the base service stays fast to install and boots
+cleanly without it. When unavailable, grading falls back to a deterministic
+stub result (clearly logged) so the rest of the system — DB writes,
+verification-queue routing, API contracts — still works end to end.
 
-Real inference: for every ML-gradeable attribute that has a fine-tuned
-checkpoint (`<GRADING_MODELS_DIR>/<vertical>/<attribute>.pt`, produced by
-ml-training/scripts/train_classifier.py — see grading/classifier.py), the
-attribute is scored by the MobileNetV3-Small classifier. Attributes without a
-checkpoint yet keep using the OpenCV edge-density proxy (or the stub when
-the ML stack isn't installed), so models can be rolled out one attribute at
-a time as labeled data accumulates (§9.3 training plan).
+Real inference, in order of preference for each ML-gradeable attribute:
+1. the vertical's grader (`<GRADING_MODELS_DIR>/<vertical>/grader.pt`), which
+   segments kernels / tiles fabric patches and scores attributes from the
+   share of bad items (grading/classifier.py:VerticalGrader);
+2. a single-attribute classifier (`<vertical>/<attribute>.pt`);
+3. the OpenCV edge-density proxy.
+Both checkpoint kinds come from ml-training/scripts/train_classifier.py.
 """
 from __future__ import annotations
 

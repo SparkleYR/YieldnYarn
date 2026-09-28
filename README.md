@@ -14,11 +14,23 @@ the full technical build plan this repository implements.
 backend-django/   Django + DRF — auth, CRUD, admin, catalog, orders, disputes, notifications
 backend-fastapi/  FastAPI — ML grading, pricing intelligence, matching/allocation engine
 ml-training/      Grading model definition, dataset export, training + evaluation scripts
-web-app/          Next.js 15 — marketing site + buyer/admin/verifier dashboards
+web-app/          Next.js 16 — marketing site + buyer/admin/verifier dashboards (English/Hindi)
 seller-app/       Kotlin Android app for sellers (offline-first listing creation)
-infra/            IaC + local Postgres init scripts
-docs/             Product & planning documentation
+infra/            Azure Bicep (infra/azure), load test, local Postgres init script
+docs/             Product & planning docs, OpenAPI schemas (docs/api), perf results (docs/perf)
 ```
+
+## Quick start: whole stack in Docker
+
+```bash
+docker compose --profile app up -d --build
+```
+
+This gives you the web app at http://localhost:3000, the API at http://localhost:8000/api (Swagger
+at `/api/docs/`) and the compute service at http://localhost:8001/compute. It runs the production
+images: Django migrates and seeds the Agriculture and Textiles verticals on start, and FastAPI
+includes the trained graders. Add `WITH_ML=false` for a small image without torch. If port 5432 is
+taken, set `DB_HOST_PORT`.
 
 ## Local Development Setup
 
@@ -40,6 +52,7 @@ cd backend-django
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 python manage.py migrate
+python manage.py seed_verticals        # Agriculture + Textiles, grading schemas, pricing rules
 python manage.py createsuperuser
 python manage.py runserver 0.0.0.0:8000
 ```
@@ -50,6 +63,8 @@ python manage.py runserver 0.0.0.0:8000
 cd backend-fastapi
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
+# optional, real ML grading with the bundled graders (CPU torch):
+pip install -r requirements-ml.txt --extra-index-url https://download.pytorch.org/whl/cpu
 uvicorn main:app --reload --port 8001
 ```
 
@@ -76,14 +91,26 @@ for offline sync, push notifications (Firebase) and tests.
 
 ### 6. Optional integrations
 
-- **Agmarknet mandi prices:** set `AGMARKNET_API_KEY` (free from data.gov.in); FastAPI ingests
-  prices every 6 hours.
+- **Agmarknet mandi prices:** FastAPI ingests prices every 6 hours from data.gov.in's Agmarknet
+  resource. It uses the public sample key (10 rows per call) until you set `AGMARKNET_API_KEY`
+  (free: register on data.gov.in, then My Account). agmarknet.gov.in itself has no API.
 - **Push notifications:** set `FIREBASE_CREDENTIALS_FILE` for Django and add
   `seller-app/app/google-services.json`.
-- **Trained grading models:** see [`ml-training/README.md`](ml-training/README.md); FastAPI picks up
-  checkpoints automatically once `requirements-ml.txt` is installed.
+- **Grading models:** graders for both verticals ship in `ml-training/checkpoints/`, and FastAPI uses
+  them once `requirements-ml.txt` is installed. See [`ml-training/README.md`](ml-training/README.md) for
+  the datasets, results and retraining.
 
-## CI
+## Tests
 
-GitHub Actions workflows in `.github/workflows/` lint and test the Django backend, FastAPI
-backend, and Next.js frontend, and build and test the seller Android app, on every push/PR.
+```bash
+cd backend-django && python manage.py test          # needs Postgres
+cd backend-fastapi && pytest                        # needs Postgres with the Django schema
+cd web-app && pnpm test && pnpm test:e2e            # e2e needs the stack running on :3000/:8000/:8001
+```
+
+## CI / deployment
+
+GitHub Actions (`.github/workflows/`) lint and test both backends and the web app on every push and PR.
+They also build and test the seller Android app, check the OpenAPI schemas in `docs/api/` for drift,
+and build the three Docker images. `deploy-azure.yml` is a manual deploy to Azure Container Apps; see
+[`infra/azure/README.md`](infra/azure/README.md).

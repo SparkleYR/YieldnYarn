@@ -15,8 +15,9 @@ multi-listing allocation).
   APScheduler, etc.). Fast to install. The service boots and serves every
   route with only this installed — grading falls back to a deterministic
   stub result if the ML stack isn't present.
-- **`requirements-ml.txt`** — heavy ML inference deps (opencv-python, torch,
-  torchvision, ultralytics, numpy) for the real grading pipeline (§9).
+- **`requirements-ml.txt`** — heavy ML inference deps (torch, torchvision,
+  timm, opencv, numpy) for the real grading pipeline (§9); install with
+  `--extra-index-url https://download.pytorch.org/whl/cpu` for CPU torch.
   Install this only when you're ready to run actual image-based grading.
   `grading/pipeline.py` / `grading/classifier.py` lazy-import everything in
   this file and fall back gracefully if it's missing. Trained checkpoints
@@ -32,8 +33,8 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 
-# optional, only for real ML grading:
-# pip install -r requirements-ml.txt
+# optional, only for real ML grading (serves ml-training/checkpoints/*/grader.pt):
+# pip install -r requirements-ml.txt --extra-index-url https://download.pytorch.org/whl/cpu
 
 # for running tests:
 pip install -r requirements-dev.txt
@@ -96,8 +97,21 @@ pytest
 Most suites are integration tests against the live local Postgres
 (`DATABASE_URL`, see `conftest.py`). The Agmarknet tests replace the
 data.gov.in API with `httpx.MockTransport`; the real-inference classifier
-tests build a randomly initialized MobileNetV3 checkpoint and are skipped
-unless `requirements-ml.txt` is installed.
+tests build a randomly initialized MobileNetV3 checkpoint, and also load the
+committed graders; they are skipped unless `requirements-ml.txt` is
+installed (CI installs it).
+
+`python scripts/export_openapi.py` regenerates `docs/api/openapi-compute.json`
+(CI fails if it's stale; `--check` to verify).
+
+## Service-to-service auth
+
+`/compute/grading/*` and `/compute/matching/*` change data and are meant for
+Django only. When `COMPUTE_INTERNAL_TOKEN` is set, they reject requests
+without a matching `X-Internal-Token` header (Django sends it from its own
+`COMPUTE_INTERNAL_TOKEN`). `/compute/pricing/*` is public read-only data used
+directly by the web and seller apps. Leave the token empty only when the
+service isn't reachable from outside (local dev).
 
 ## Table names
 
@@ -113,14 +127,16 @@ affected model(s) in `db.py` to match.
 ## Known simplifications / TODOs
 
 - **Grading** runs synchronously in the request/response cycle (no job
-  queue yet). Attributes with a trained checkpoint are scored by
-  MobileNetV3-Small; the rest still use the OpenCV edge-density proxy.
-  YOLOv8n detection is not wired.
-- **Pricing region** — `/adjusted` looks up the most recent price point for a
-  listing's commodity across *all* regions, since listings store lat/lng and
-  `price_points.region` is a free-text state name; mapping one to the other
-  needs reverse geocoding or boundary data.
-- **Agmarknet ingestion** (`scheduler/agmarknet.py`) is real but only runs
-  when `AGMARKNET_API_KEY` is set. It stores one price point per
+  queue; ~0.15 s per photo on CPU). The vertical grader
+  (`checkpoints/<vertical>/grader.pt`) scores the attributes it covers, and
+  the rest use a per-attribute checkpoint or the OpenCV edge-density proxy.
+  Evidence is read from Django's media directory, or downloaded from
+  `EVIDENCE_BASE_URL` (+ `EVIDENCE_URL_QUERY` SAS) on Azure.
+- **Pricing region** — `/adjusted` prefers the listing's own `region` (state,
+  picked in the seller app) and falls back to the most recent price across
+  all states.
+- **Agmarknet ingestion** (`scheduler/agmarknet.py`) uses data.gov.in's
+  public sample key (10 records per call, a few pages per run) until
+  `AGMARKNET_API_KEY` is set; `AGMARKNET_USE_SAMPLE_KEY=false` disables that. It stores one price point per
   commodity/state/day (mean of that day's mandi modal prices), converted
   from ₹/quintal to the vertical's `unit_of_measure`.
