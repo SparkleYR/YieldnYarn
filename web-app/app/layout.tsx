@@ -26,16 +26,16 @@ const dmMono = DM_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "MSME Marketplace — Trade Commodities Smarter Across India",
+  title: "YieldnYarn — Sell crops and cloth at a fair price",
   description:
-    "AI-graded quality. Real-time market pricing. Multi-seller order fulfillment. Built for MSME producers and buyers across Agriculture and Textiles.",
+    "Farmers and weavers list their produce with a few photos, see today's mandi price, and get offers from buyers across India.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`${inter.variable} ${dmMono.variable} ${devanagari.variable} h-full antialiased dark`}
+      className={`${inter.variable} ${dmMono.variable} ${devanagari.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-background text-foreground">
         <I18nProvider>

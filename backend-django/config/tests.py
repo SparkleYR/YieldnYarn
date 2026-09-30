@@ -1,7 +1,7 @@
 from io import StringIO
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -148,7 +148,10 @@ class SeedVerticalsTest(TestCase):
         agriculture = Vertical.objects.get(slug="agriculture")
         ml = [a["name"] for a in agriculture.grading_schema.attributes if a["gradeable_by_ml"]]
         self.assertEqual(ml, ["foreign_matter", "damaged_kernels"])
-        self.assertIn("grade_adjustment_table", agriculture.pricing_rule.rules)
+        # Grade names must match what grading produces ("Grade A"), or the
+        # quality price adjustment silently never applies.
+        grades = [row["grade"] for row in agriculture.pricing_rule.rules["grade_adjustment_table"]]
+        self.assertEqual(grades, ["Grade A", "Grade B", "Grade C"])
 
     def test_update_keeps_existing_vertical_but_resets_schema(self):
         from django.core.management import call_command
@@ -159,3 +162,22 @@ class SeedVerticalsTest(TestCase):
         vertical.refresh_from_db()
         self.assertEqual(vertical.name, "Fabric")
         self.assertEqual(vertical.grading_schema.attributes[0]["name"], "defect_rate")
+
+
+@override_settings(DEBUG=True)
+class SeedDemoTest(TestCase):
+    def test_seeds_resets_and_refuses_without_debug(self):
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+
+        from catalog.models import Listing
+
+        call_command("seed_verticals", stdout=StringIO())
+        call_command("seed_demo", stdout=StringIO())
+        self.assertEqual(Listing.objects.filter(seller__email__endswith="@demo.local").count(), 7)
+        call_command("seed_demo", stdout=StringIO())  # no-op when present
+        self.assertEqual(Listing.objects.filter(seller__email__endswith="@demo.local").count(), 7)
+        call_command("seed_demo", reset=True, stdout=StringIO())  # orders protect listings: must not crash
+        self.assertEqual(Listing.objects.filter(seller__email__endswith="@demo.local").count(), 7)
+        with override_settings(DEBUG=False), self.assertRaises(CommandError):
+            call_command("seed_demo", stdout=StringIO())

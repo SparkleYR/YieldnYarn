@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
-import { cn } from "@/lib/utils";
 import {
   ApiError,
   counterBid,
@@ -13,6 +12,9 @@ import {
 } from "@/lib/api";
 import { getStoredTokens } from "@/lib/auth";
 import { useI18n, type MessageKey } from "@/lib/i18n";
+import { formatQty } from "@/lib/format";
+import { PageHeader } from "@/components/shared/page-header";
+import { SegmentedTabs } from "@/components/shared/segmented-tabs";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -116,84 +118,79 @@ export default function OffersPage() {
 
   if (error) {
     return (
-      <div className="rounded-2xl border border-border-muted bg-surface p-8 text-center text-sm text-body">
+      <div className="state-box">
         {error}
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-lg font-semibold text-heading">{t("offers.title")}</h1>
-        <p className="mt-1 text-sm text-body">
-          {t("offers.subtitle")}
-        </p>
-      </div>
+    <div className="page">
+      <PageHeader title={t("offers.title")} subtitle={t("offers.subtitle")} />
 
-      <div className="flex gap-2" role="tablist">
-        {TABS.map((option) => (
-          <button
-            key={option.id}
-            type="button"
-            role="tab"
-            aria-selected={tab === option.id}
-            onClick={() => setTab(option.id)}
-            className={cn(
-              "rounded-full border px-3.5 py-1.5 text-sm transition-colors",
-              tab === option.id
-                ? "border-heading bg-heading text-surface"
-                : "border-border-muted text-body hover:text-heading"
-            )}
-          >
-            {t(option.label)}
-            {counts[option.id] > 0 && <span className="ml-1.5 opacity-70">{counts[option.id]}</span>}
-          </button>
-        ))}
-      </div>
+      <SegmentedTabs
+        tabs={TABS.map((option) => ({ id: option.id, label: t(option.label), count: counts[option.id] }))}
+        value={tab}
+        onChange={setTab}
+      />
 
       {loading && (
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-4">
           {Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton key={i} className="h-24 rounded-2xl" />
+            <Skeleton key={i} className="h-40 rounded-2xl" />
           ))}
         </div>
       )}
 
       {!loading && visible.length === 0 && (
-        <p className="rounded-2xl border border-dashed border-border-muted p-12 text-center text-sm text-body">
+        <p className="state-box border-dashed">
           {tab === "needs-you" ? t("offers.emptyNeedsYou") : t("offers.empty")}
         </p>
       )}
 
       {!loading && visible.length > 0 && (
-        <ul className="flex flex-col gap-3">
+        <ul className="flex flex-col gap-4">
           {visible.map((bid) => {
             const isCounter = bid.proposed_by !== null && bid.proposed_by !== bid.buyer;
             const total = Number(bid.offered_price) * Number(bid.offered_quantity);
             const busy = busyId === bid.id;
             return (
-              <li key={bid.id} className="rounded-2xl border border-border-muted bg-surface p-5" data-testid={`offer-${bid.id}`}>
+              <li key={bid.id} className="panel flex flex-col gap-4" data-testid={`offer-${bid.id}`}>
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <p className="font-medium text-heading">{bid.commodity_name}</p>
-                    <p className="text-xs text-muted-2">
+                    <p className="text-lg font-bold text-heading">{bid.commodity_name}</p>
+                    <p className="text-sm font-medium text-muted-2">
                       {isCounter ? t("offers.counterFromSeller") : t("offers.yourOffer")}
                       {bid.parent_bid && !isCounter && t("offers.counteringSeller")}
                     </p>
                   </div>
                   <StatusBadge status={bid.status} />
                 </div>
-                <p className="mt-3 text-sm text-heading">
-                  {rupees(bid.offered_price, intlLocale)} / {bid.unit} × {Number(bid.offered_quantity)} {bid.unit}
-                  <span className="ml-2 text-muted-2">= {rupees(total, intlLocale)}</span>
-                </p>
-                {bid.message && <p className="mt-1 text-sm text-body">“{bid.message}”</p>}
+
+                <dl className="grid grid-cols-1 gap-2 rounded-xl bg-muted/60 p-4 sm:grid-cols-3 sm:gap-3 [&>div]:flex [&>div]:items-baseline [&>div]:justify-between [&>div]:gap-3 sm:[&>div]:block">
+                  <div>
+                    <dt className="text-sm text-muted-2">{t("offers.price")}</dt>
+                    <dd className="text-lg font-bold text-heading tabular-nums">
+                      {rupees(bid.offered_price, intlLocale)}
+                      <span className="text-sm font-semibold text-muted-2"> / {bid.unit}</span>
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-sm text-muted-2">{t("common.quantity")}</dt>
+                    <dd className="text-lg font-bold text-heading tabular-nums">
+                      {formatQty(bid.offered_quantity, intlLocale)} {bid.unit}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-sm text-muted-2">{t("common.total")}</dt>
+                    <dd className="text-lg font-extrabold text-brand-primary tabular-nums">{rupees(total, intlLocale)}</dd>
+                  </div>
+                </dl>
+                {bid.message && <p className="text-[0.9375rem] text-body italic">“{bid.message}”</p>}
 
                 {bid.status === "PENDING" && bid.awaiting_response_from === "BUYER" && (
-                  <div className="mt-4 flex flex-wrap gap-2">
+                  <div className="flex flex-wrap gap-2">
                     <Button
-                      size="sm"
                       disabled={busy}
                       onClick={() =>
                         act(bid, () => withToken((token) => updateBidStatus(bid.id, "ACCEPTED", token)), t("offers.accepted"))
@@ -201,12 +198,12 @@ export default function OffersPage() {
                     >
                       {t("offers.accept", { total: rupees(total, intlLocale) })}
                     </Button>
-                    <Button size="sm" variant="outline" disabled={busy} onClick={() => setCounteringId(counteringId === bid.id ? null : bid.id)}>
+                    <Button variant="outline" disabled={busy} onClick={() => setCounteringId(counteringId === bid.id ? null : bid.id)}>
                       {t("offers.counter")}
                     </Button>
                     <Button
-                      size="sm"
                       variant="ghost"
+                      className="text-error hover:bg-error/10 hover:text-error"
                       disabled={busy}
                       onClick={() => act(bid, () => withToken((token) => updateBidStatus(bid.id, "REJECTED", token)), t("offers.rejected"))}
                     >
@@ -257,26 +254,26 @@ function CounterForm({
 
   return (
     <form
-      className="mt-4 grid gap-3 rounded-xl border border-border-muted p-4 sm:grid-cols-3"
+      className="grid gap-4 rounded-xl border border-border bg-muted/40 p-4 sm:grid-cols-3"
       onSubmit={(e) => {
         e.preventDefault();
         if (valid) onSubmit(Number(price), Number(quantity), message.trim());
       }}
     >
-      <label className="flex flex-col gap-1 text-xs text-muted-2">
+      <label className="field-label flex flex-col gap-2">
         {t("offers.pricePer", { unit: bid.unit })}
-        <Input type="number" min="0" step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} />
+        <Input type="number" inputMode="decimal" min="0" step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} />
       </label>
-      <label className="flex flex-col gap-1 text-xs text-muted-2">
+      <label className="field-label flex flex-col gap-2">
         {t("offers.quantityIn", { unit: bid.unit })}
-        <Input type="number" min="0" step="0.01" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
+        <Input type="number" inputMode="decimal" min="0" step="0.01" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
       </label>
-      <label className="flex flex-col gap-1 text-xs text-muted-2">
+      <label className="field-label flex flex-col gap-2">
         {t("offers.message")}
         <Input value={message} onChange={(e) => setMessage(e.target.value)} />
       </label>
       <div className="sm:col-span-3">
-        <Button type="submit" size="sm" disabled={!valid || busy}>
+        <Button type="submit" disabled={!valid || busy}>
           {t("offers.sendCounter")}
         </Button>
       </div>

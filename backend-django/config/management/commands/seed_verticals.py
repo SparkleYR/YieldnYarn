@@ -16,9 +16,9 @@ from django.db import transaction
 from config.models import GradingSchema, PricingRule, Vertical
 
 GRADE_ADJUSTMENTS = [
-    {"grade": "A", "multiplier": 1.1},
-    {"grade": "B", "multiplier": 1.0},
-    {"grade": "C", "multiplier": 0.88},
+    {"grade": "Grade A", "multiplier": 1.1},
+    {"grade": "Grade B", "multiplier": 1.0},
+    {"grade": "Grade C", "multiplier": 0.88},
 ]
 
 VERTICALS = [
@@ -27,11 +27,11 @@ VERTICALS = [
         "name": "Agriculture",
         "unit_of_measure": "quintal",
         "attributes": [
-            {"name": "foreign_matter", "type": "percentage", "range": [0, 100], "ideal_value": 0,
+            {"name": "foreign_matter", "type": "numeric", "range": [0, 100], "ideal_value": 0,
              "weight": 0.5, "gradeable_by_ml": True},
-            {"name": "damaged_kernels", "type": "percentage", "range": [0, 100], "ideal_value": 0,
+            {"name": "damaged_kernels", "type": "numeric", "range": [0, 100], "ideal_value": 0,
              "weight": 0.5, "gradeable_by_ml": True},
-            {"name": "moisture", "type": "percentage", "range": [0, 30], "ideal_value": 12,
+            {"name": "moisture", "type": "numeric", "range": [0, 30], "ideal_value": 12,
              "weight": 0.0, "gradeable_by_ml": False},
         ],
         "quantity_tiers": [
@@ -45,9 +45,9 @@ VERTICALS = [
         "name": "Textiles",
         "unit_of_measure": "metre",
         "attributes": [
-            {"name": "defect_rate", "type": "percentage", "range": [0, 100], "ideal_value": 0,
+            {"name": "defect_rate", "type": "numeric", "range": [0, 100], "ideal_value": 0,
              "weight": 1.0, "gradeable_by_ml": True},
-            {"name": "gsm", "type": "number", "range": [30, 600], "ideal_value": None,
+            {"name": "gsm", "type": "numeric", "range": [30, 600], "ideal_value": None,
              "weight": 0.0, "gradeable_by_ml": False},
         ],
         "quantity_tiers": [

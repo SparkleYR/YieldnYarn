@@ -31,15 +31,17 @@ import {
 } from "@/components/ui/select";
 
 const schema = z.object({
-  vertical: z.coerce.number().int().positive("Select a vertical"),
-  commodity: z.string().min(1, "Required"),
-  quantity: z.coerce.number().positive("Must be greater than 0"),
-  min_grade: z.string().min(1, "Required"),
-  max_price: z.coerce.number().positive("Must be greater than 0"),
-  region: z.string().min(1, "Required"),
+  vertical: z.coerce.number().int().positive("form.chooseCategory"),
+  commodity: z.string().min(1, "form.required"),
+  quantity: z.coerce.number().positive("form.positive"),
+  min_grade: z.string().min(1, "form.required"),
+  max_price: z.coerce.number().positive("form.positive"),
+  region: z.string().min(1, "form.required"),
 });
 
 type FormInput = z.input<typeof schema>;
+
+const GRADES = ["Grade A", "Grade B", "Grade C"] as const;
 type FormValues = z.output<typeof schema>;
 
 export function PostRequirementDialog({
@@ -96,7 +98,7 @@ export function PostRequirementDialog({
           {t("postRequirement.open")}
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>{t("postRequirement.title")}</DialogTitle>
           <DialogDescription>
@@ -140,19 +142,36 @@ export function PostRequirementDialog({
 
             <Field data-invalid={!!errors.quantity}>
               <FieldLabel htmlFor="quantity">{t("common.quantity")}</FieldLabel>
-              <Input id="quantity" type="number" step="any" {...register("quantity")} />
+              <Input id="quantity" type="number" inputMode="decimal" step="any" {...register("quantity")} />
               <FieldError errors={errors.quantity ? [errors.quantity] : undefined} />
             </Field>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 sm:gap-3">
               <Field data-invalid={!!errors.min_grade}>
                 <FieldLabel htmlFor="min_grade">{t("postRequirement.minGrade")}</FieldLabel>
-                <Input id="min_grade" placeholder="Grade A" {...register("min_grade")} />
+                <Controller
+                  control={control}
+                  name="min_grade"
+                  render={({ field }) => (
+                    <Select value={field.value || undefined} onValueChange={field.onChange}>
+                      <SelectTrigger id="min_grade" className="w-full">
+                        <SelectValue placeholder={t("common.chooseOne")} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {GRADES.map((grade) => (
+                          <SelectItem key={grade} value={grade}>
+                            {t(`grade.${grade.slice(-1) as "A" | "B" | "C"}`)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
                 <FieldError errors={errors.min_grade ? [errors.min_grade] : undefined} />
               </Field>
               <Field data-invalid={!!errors.max_price}>
                 <FieldLabel htmlFor="max_price">{t("postRequirement.maxPrice")}</FieldLabel>
-                <Input id="max_price" type="number" step="any" {...register("max_price")} />
+                <Input id="max_price" type="number" inputMode="decimal" step="any" {...register("max_price")} />
                 <FieldError errors={errors.max_price ? [errors.max_price] : undefined} />
               </Field>
             </div>

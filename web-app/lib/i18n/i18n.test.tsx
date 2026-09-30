@@ -31,7 +31,7 @@ describe("i18n", () => {
   it("renders English by default and fills placeholders", () => {
     renderWithSwitcher();
     expect(screen.getByTestId("title").textContent).toBe("My orders");
-    expect(screen.getByTestId("vars").textContent).toBe("Matched — order #42 created.");
+    expect(screen.getByTestId("vars").textContent).toBe("Seller found — order #42 created.");
   });
 
   it("switches to Hindi, remembers the choice, and sets <html lang>", () => {
@@ -39,7 +39,7 @@ describe("i18n", () => {
     act(() => screen.getByRole("button", { name: "हिन्दी" }).click());
 
     expect(screen.getByTestId("title").textContent).toBe("मेरे ऑर्डर");
-    expect(screen.getByTestId("vars").textContent).toBe("मैच हुआ — ऑर्डर #42 बना।");
+    expect(screen.getByTestId("vars").textContent).toBe("विक्रेता मिल गया — ऑर्डर #42 बना।");
     expect(window.localStorage.getItem("msme-locale")).toBe("hi");
     expect(document.documentElement.lang).toBe("hi");
   });

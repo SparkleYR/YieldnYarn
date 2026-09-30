@@ -18,7 +18,7 @@ test.describe("Password reset", () => {
 
     await page.goto("/forgot-password");
     await page.getByLabel("Email").fill(email);
-    await page.getByRole("button", { name: "Send reset link" }).click();
+    await page.getByRole("button", { name: "Send me the link" }).click();
 
     await expect(page.getByText("Check your email")).toBeVisible();
   });
@@ -28,7 +28,7 @@ test.describe("Password reset", () => {
   }) => {
     await page.goto("/forgot-password");
     await page.getByLabel("Email").fill(uniqueEmail("nobody"));
-    await page.getByRole("button", { name: "Send reset link" }).click();
+    await page.getByRole("button", { name: "Send me the link" }).click();
 
     await expect(page.getByText("Check your email")).toBeVisible();
   });
@@ -36,7 +36,7 @@ test.describe("Password reset", () => {
   test("visiting /reset-password without a link shows an invalid-link state, not a broken form", async ({ page }) => {
     await page.goto("/reset-password");
 
-    await expect(page.getByText("Invalid reset link")).toBeVisible();
+    await expect(page.getByText("This link does not work")).toBeVisible();
     await expect(page.getByLabel("New password", { exact: true })).not.toBeVisible();
   });
 
@@ -45,9 +45,9 @@ test.describe("Password reset", () => {
 
     await page.getByLabel("New password", { exact: true }).fill("BrandNewPassword456");
     await page.getByLabel("Confirm new password").fill("BrandNewPassword456");
-    await page.getByRole("button", { name: "Reset password" }).click();
+    await page.getByRole("button", { name: "Save new password" }).click();
 
-    await expect(page.getByText(/invalid or has expired/i)).toBeVisible();
+    await expect(page.getByText(/old or already used/i)).toBeVisible();
     await expect(page).toHaveURL(/\/reset-password/); // did not navigate away
   });
 
@@ -56,7 +56,7 @@ test.describe("Password reset", () => {
 
     await page.getByLabel("New password", { exact: true }).fill("BrandNewPassword456");
     await page.getByLabel("Confirm new password").fill("SomethingElse789");
-    await page.getByRole("button", { name: "Reset password" }).click();
+    await page.getByRole("button", { name: "Save new password" }).click();
 
     await expect(page.getByText("Passwords don't match")).toBeVisible();
   });

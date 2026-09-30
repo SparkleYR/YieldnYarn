@@ -19,12 +19,14 @@ import {
   FieldLabel,
 } from "@/components/ui/field";
 
-const loginSchema = z.object({
-  email: z.email("Enter a valid email address"),
-  password: z.string().min(1, "Password is required"),
-});
+function makeSchema(t: ReturnType<typeof useT>) {
+  return z.object({
+    email: z.email(t("form.emailInvalid")),
+    password: z.string().min(1, t("form.passwordRequired")),
+  });
+}
 
-type LoginValues = z.infer<typeof loginSchema>;
+type LoginValues = z.infer<ReturnType<typeof makeSchema>>;
 
 export default function LoginPage() {
   const router = useRouter();
@@ -34,7 +36,7 @@ export default function LoginPage() {
     register: registerField,
     handleSubmit,
     formState: { errors, isSubmitting },
-  } = useForm<LoginValues>({ resolver: zodResolver(loginSchema) });
+  } = useForm<LoginValues>({ resolver: zodResolver(makeSchema(t)) });
 
   async function onSubmit(values: LoginValues) {
     setFormError(null);
@@ -55,9 +57,9 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="rounded-2xl border border-border-muted bg-surface p-8">
-      <h1 className="text-xl font-semibold text-heading">{t("auth.login.title")}</h1>
-      <p className="mt-1 text-sm text-body">{t("auth.login.welcome")}</p>
+    <div className="panel sm:p-8">
+      <h1 className="page-title">{t("auth.login.title")}</h1>
+      <p className="page-subtitle">{t("auth.login.welcome")}</p>
 
       <form onSubmit={handleSubmit(onSubmit)} className="mt-6">
         <FieldGroup>
@@ -78,7 +80,7 @@ export default function LoginPage() {
               <FieldLabel htmlFor="password">{t("auth.password")}</FieldLabel>
               <Link
                 href="/forgot-password"
-                className="text-xs font-medium text-brand-primary-glow hover:underline"
+                className="text-sm font-semibold text-brand-primary hover:underline"
               >
                 {t("auth.login.forgot")}
               </Link>
@@ -94,20 +96,20 @@ export default function LoginPage() {
           </Field>
 
           {formError && (
-            <p role="alert" className="text-sm text-error">
+            <p role="alert" className="rounded-xl bg-error/10 px-3.5 py-2.5 text-sm font-semibold text-error">
               {formError}
             </p>
           )}
 
-          <Button type="submit" disabled={isSubmitting} className="mt-2 w-full">
+          <Button type="submit" size="lg" disabled={isSubmitting} className="mt-1 w-full">
             {isSubmitting ? t("auth.login.submitting") : t("auth.login.submit")}
           </Button>
         </FieldGroup>
       </form>
 
-      <p className="mt-6 text-center text-sm text-body">
+      <p className="mt-6 text-center text-[0.9375rem] text-body">
         {t("auth.login.noAccount")}{" "}
-        <Link href="/register" className="font-medium text-brand-primary-glow hover:underline">
+        <Link href="/register" className="font-bold text-brand-primary hover:underline">
           {t("auth.login.signUp")}
         </Link>
       </p>

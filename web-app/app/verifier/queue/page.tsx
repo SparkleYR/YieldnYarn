@@ -6,6 +6,7 @@ import Link from "next/link";
 import { ApiError, listVerificationQueue, type VerificationQueueItem } from "@/lib/api";
 import { getStoredTokens } from "@/lib/auth";
 import { PriorityBadge } from "@/components/shared/status-badge";
+import { PageHeader } from "@/components/shared/page-header";
 import { ConfidenceBar } from "@/components/shared/confidence-bar";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -59,51 +60,49 @@ export default function VerifierQueuePage() {
 
   if (error) {
     return (
-      <div className="rounded-2xl border border-border-muted bg-surface p-8 text-center text-sm text-body">
+      <div className="state-box">
         {error}
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-lg font-semibold text-heading">Verification queue</h1>
-        <p className="text-sm text-body">
-          {loading ? "Loading…" : `${sorted.length} listings awaiting review.`}
-        </p>
-      </div>
+    <div className="page">
+      <PageHeader
+        title="Photos to check"
+        subtitle={loading ? "Loading…" : `${sorted.length} listing${sorted.length === 1 ? "" : "s"} waiting. Most urgent first.`}
+      />
 
-      <div className="rounded-2xl border border-border-muted bg-surface">
+      <div className="panel-flush">
         <Table>
           <TableHeader>
-            <TableRow className="border-border-muted hover:bg-transparent">
-              <TableHead className="pl-5">Listing</TableHead>
-              <TableHead>Flagged reason</TableHead>
-              <TableHead>AI grade</TableHead>
-              <TableHead>Confidence</TableHead>
+            <TableRow className="hover:bg-transparent">
+              <TableHead>Item</TableHead>
+              <TableHead>Why it needs you</TableHead>
+              <TableHead>Photo-check grade</TableHead>
+              <TableHead>How sure</TableHead>
               <TableHead>Priority</TableHead>
-              <TableHead className="pr-5 text-right">Review</TableHead>
+              <TableHead className="text-right">Check</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading &&
               Array.from({ length: 3 }).map((_, i) => (
-                <TableRow key={i} className="border-border-muted hover:bg-transparent">
-                  <TableCell className="pl-5" colSpan={6}>
+                <TableRow key={i} className="border-border hover:bg-transparent">
+                  <TableCell colSpan={6}>
                     <Skeleton className="h-5 w-full" />
                   </TableCell>
                 </TableRow>
               ))}
             {!loading &&
               sorted.map((item) => (
-                <TableRow key={item.listing_id} className="border-border-muted">
-                  <TableCell className="pl-5">
-                    <p className="font-medium text-heading">{item.commodity_name}</p>
-                    <p className="text-xs text-muted-2">{item.seller_name}</p>
+                <TableRow key={item.listing_id} className="border-border">
+                  <TableCell>
+                    <p className="font-bold text-heading">{item.commodity_name}</p>
+                    <p className="text-sm text-muted-2">{item.seller_name}</p>
                   </TableCell>
-                  <TableCell className="max-w-xs text-body">{item.flagged_reason}</TableCell>
-                  <TableCell className="text-body">{item.ai_grade ?? "Ungraded"}</TableCell>
+                  <TableCell className="max-w-xs whitespace-normal">{item.flagged_reason}</TableCell>
+                  <TableCell className="font-semibold text-heading">{item.ai_grade ?? "No grade"}</TableCell>
                   <TableCell>
                     {item.ai_confidence !== null ? (
                       <ConfidenceBar value={item.ai_confidence} />
@@ -114,17 +113,17 @@ export default function VerifierQueuePage() {
                   <TableCell>
                     <PriorityBadge priority={item.priority} />
                   </TableCell>
-                  <TableCell className="pr-5 text-right">
+                  <TableCell className="text-right">
                     <Button variant="outline" size="sm" asChild>
-                      <Link href={`/verifier/queue/${item.listing_id}`}>Review</Link>
+                      <Link href={`/verifier/queue/${item.listing_id}`}>Check</Link>
                     </Button>
                   </TableCell>
                 </TableRow>
               ))}
             {!loading && sorted.length === 0 && (
-              <TableRow className="border-border-muted hover:bg-transparent">
-                <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-2">
-                  Queue is empty.
+              <TableRow className="hover:bg-transparent">
+                <TableCell colSpan={6} className="py-12 text-center text-base whitespace-normal">
+                  Nothing to check right now.
                 </TableCell>
               </TableRow>
             )}

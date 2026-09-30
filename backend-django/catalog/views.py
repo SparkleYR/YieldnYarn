@@ -200,10 +200,10 @@ def _priority_for_confidence(confidence):
 
 def _flagged_reason(confidence):
     if confidence is None:
-        return "No AI grading result yet."
+        return "The photos have not been checked yet."
     return (
-        f"AI confidence {confidence * 100:.0f}% is below the "
-        f"{CONFIDENCE_VERIFICATION_THRESHOLD * 100:.0f}% verification threshold."
+        f"The photo check was only {confidence * 100:.0f}% sure "
+        f"(it needs {CONFIDENCE_VERIFICATION_THRESHOLD * 100:.0f}% to approve on its own)."
     )
 
 
@@ -330,10 +330,26 @@ class VerificationReviewView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        decision = request.data.get("decision", "APPROVE").upper()
+        decision = str(request.data.get("decision", "APPROVE")).upper()
+        if decision not in ("APPROVE", "REJECT"):
+            return Response({"decision": "Must be APPROVE or REJECT."}, status=status.HTTP_400_BAD_REQUEST)
         notes = request.data.get("notes", "")
-        attribute_scores = request.data.get("attribute_scores")
-        if not attribute_scores:
+        overrides = request.data.get("attribute_scores")
+        latest_result = listing.grading_results.order_by("-created_at").first()
+        previous_scores = dict(latest_result.attribute_scores) if latest_result else {}
+        if overrides:
+            # Corrections are 0–1 numbers for some or all attributes; any
+            # attribute not corrected keeps its previous score (a partial
+            # override must not drop the others).
+            if not isinstance(overrides, dict) or not all(
+                isinstance(v, (int, float)) and not isinstance(v, bool) and 0 <= v <= 1 for v in overrides.values()
+            ):
+                return Response(
+                    {"attribute_scores": "Each score must be a number from 0 to 1."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            attribute_scores = {**previous_scores, **{k: float(v) for k, v in overrides.items()}}
+        else:
             # "Confirm AI Grade" (components/verifier/review-panel.tsx) sends
             # no attribute_scores at all — that means "I agree with the AI's
             # scores", not "this listing has no scores". Carry the latest
@@ -344,8 +360,7 @@ class VerificationReviewView(APIView):
             # adjustment) derive a listing's grade from attribute_scores, not
             # from status, so an empty dict here makes a confirmed listing
             # look ungraded everywhere except the status field itself.
-            latest_result = listing.grading_results.order_by("-created_at").first()
-            attribute_scores = latest_result.attribute_scores if latest_result else {}
+            attribute_scores = previous_scores
 
         GradingResult.objects.create(
             listing=listing,
@@ -366,12 +381,12 @@ class VerificationReviewView(APIView):
         Notification.objects.create(
             user_id=listing.seller_id,
             type=Notification.Type.GRADING_COMPLETE,
-            title="Listing reviewed",
+            title="Quality check done" if decision == "APPROVE" else "Your listing needs changes",
             message=(
-                f"{listing.commodity_name} was approved by a verifier and is now live."
+                f"Good news! Your {listing.commodity_name} has been checked and is now for sale."
                 if decision == "APPROVE"
-                else f"{listing.commodity_name} was sent back to draft by a verifier."
-                + (f" Notes: {notes}" if notes else "")
+                else f"Your {listing.commodity_name} could not be approved yet. Please fix it and send it again."
+                + (f" Note from the checker: {notes}" if notes else "")
             ),
             related_object_type="listing",
             related_object_id=listing.id,

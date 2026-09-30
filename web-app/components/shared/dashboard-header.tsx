@@ -58,20 +58,20 @@ export function DashboardHeader({
   }
 
   return (
-    <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border-muted px-4">
-      <SidebarTrigger />
-      <Separator orientation="vertical" className="mr-2 h-4" />
-      <h1 className="text-sm font-medium text-heading">{title}</h1>
+    <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-2 border-b border-border bg-card/95 px-4 backdrop-blur sm:px-6">
+      <SidebarTrigger className="size-10" />
+      <Separator orientation="vertical" className="mr-2 h-6" />
+      <p className="truncate text-base font-bold text-heading">{title}</p>
 
       <div className="ml-auto flex items-center gap-2">
-        {translated && <LanguageSwitcher className="hidden sm:flex" />}
+        {translated && <LanguageSwitcher compact />}
         {notificationsHref && (
           <Link
             href={notificationsHref}
-            className="flex size-8 items-center justify-center rounded-lg text-muted-2 transition-colors hover:bg-muted hover:text-natural-white"
+            className="flex size-10 items-center justify-center rounded-xl text-body transition-colors hover:bg-muted hover:text-heading"
             aria-label={t("header.notifications")}
           >
-            <IconBell size={17} />
+            <IconBell size={21} />
           </Link>
         )}
 
@@ -81,8 +81,8 @@ export function DashboardHeader({
               type="button"
               className="rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
-              <Avatar size="sm">
-                <AvatarFallback>{initials(user)}</AvatarFallback>
+              <Avatar size="lg">
+                <AvatarFallback className="bg-brand-primary-muted font-bold text-brand-primary-hover">{initials(user)}</AvatarFallback>
               </Avatar>
             </button>
           </DropdownMenuTrigger>

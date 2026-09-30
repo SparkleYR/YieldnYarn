@@ -3,6 +3,7 @@ from rest_framework import serializers
 
 from catalog.serializers import _display_name
 from notifications.models import Notification
+from orders.models import OrderAllocation
 
 from .models import Dispute
 
@@ -37,9 +38,42 @@ class DisputeSerializer(serializers.ModelSerializer):
     def get_against_name(self, dispute) -> str:
         return _display_name(dispute.against)
 
+    def validate(self, attrs):
+        if self.instance is not None:
+            return attrs
+        # Creating: only a party to the order may raise it, only against the
+        # other party, and it always starts OPEN (staff move it on from there).
+        user = self.context["request"].user
+        order = attrs["order"]
+        sellers = set(
+            OrderAllocation.objects.filter(order=order).values_list("listing__seller_id", flat=True)
+        )
+        if user.id == order.buyer_id:
+            counterparties = sellers
+        elif user.id in sellers:
+            counterparties = {order.buyer_id}
+        else:
+            raise serializers.ValidationError({"order": "You can only report a problem on your own orders."})
+        against = attrs.get("against")
+        if against is None or against.id not in counterparties:
+            raise serializers.ValidationError({"against": "Choose the other party on this order."})
+        attrs["status"] = Dispute.Status.OPEN
+        attrs.pop("resolution_notes", None)
+        return attrs
+
     def create(self, validated_data):
         validated_data["raised_by"] = self.context["request"].user
-        return super().create(validated_data)
+        dispute = super().create(validated_data)
+        Notification.objects.create(
+            user_id=dispute.against_id,
+            type=Notification.Type.DISPUTE_UPDATE,
+            title="Problem reported on an order",
+            message=f"{_display_name(dispute.raised_by)} reported a problem with order #{dispute.order_id}. "
+            "Our team will look into it.",
+            related_object_type="dispute",
+            related_object_id=dispute.id,
+        )
+        return dispute
 
     def update(self, instance, validated_data):
         new_status = validated_data.get("status")

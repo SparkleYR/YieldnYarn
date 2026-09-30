@@ -41,6 +41,7 @@ class OrderAllocationSerializer(serializers.ModelSerializer):
     # separate per-listing fetch just to show what/who was in the allocation.
     commodity_name = serializers.CharField(source="listing.commodity_name", read_only=True)
     unit = serializers.CharField(source="listing.unit", read_only=True)
+    seller = serializers.IntegerField(source="listing.seller_id", read_only=True)
     seller_name = serializers.SerializerMethodField()
 
     class Meta:
@@ -51,6 +52,7 @@ class OrderAllocationSerializer(serializers.ModelSerializer):
             "listing",
             "commodity_name",
             "unit",
+            "seller",
             "seller_name",
             "allocated_quantity",
             "unit_price",

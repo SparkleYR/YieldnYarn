@@ -60,7 +60,7 @@ export async function loginViaUi(page: Page, email: string, password: string) {
   // shortcuts (e.g. the command palette's Ctrl/Cmd+K listener) attach in a
   // useEffect that hasn't necessarily run yet at that point, so callers that
   // immediately send a keyboard shortcut need the page to be settled first.
-  await page.getByRole("heading", { name: "Dashboard" }).first().waitFor();
+  await page.getByRole("heading", { level: 1 }).first().waitFor();
 }
 
 /**

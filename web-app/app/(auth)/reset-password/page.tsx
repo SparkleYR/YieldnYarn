@@ -15,11 +15,11 @@ import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field
 
 const schema = z
   .object({
-    password: z.string().min(8, "At least 8 characters"),
-    confirmPassword: z.string().min(1, "Required"),
+    password: z.string().min(8, "form.minPassword"),
+    confirmPassword: z.string().min(1, "form.required"),
   })
   .refine((data) => data.password === data.confirmPassword, {
-    message: "Passwords don't match",
+    message: "form.passwordMismatch",
     path: ["confirmPassword"],
   });
 
@@ -66,14 +66,14 @@ function ResetPasswordForm() {
 
   if (!uid || !token) {
     return (
-      <div className="rounded-2xl border border-border-muted bg-surface p-8 text-center">
-        <h1 className="text-xl font-semibold text-heading">{t("auth.reset.invalidTitle")}</h1>
-        <p className="mt-2 text-sm text-body">
+      <div className="panel text-center sm:p-8">
+        <h1 className="page-title">{t("auth.reset.invalidTitle")}</h1>
+        <p className="page-subtitle">
           {t("auth.reset.invalidBody")}
         </p>
         <Link
           href="/forgot-password"
-          className="mt-6 inline-block text-sm font-medium text-brand-primary-glow hover:underline"
+          className="mt-6 inline-block text-sm font-medium text-brand-primary hover:underline"
         >
           {t("auth.reset.requestNew")}
         </Link>
@@ -82,9 +82,9 @@ function ResetPasswordForm() {
   }
 
   return (
-    <div className="rounded-2xl border border-border-muted bg-surface p-8">
-      <h1 className="text-xl font-semibold text-heading">{t("auth.reset.title")}</h1>
-      <p className="mt-1 text-sm text-body">{t("auth.reset.subtitle")}</p>
+    <div className="panel sm:p-8">
+      <h1 className="page-title">{t("auth.reset.title")}</h1>
+      <p className="page-subtitle">{t("auth.reset.subtitle")}</p>
 
       <form onSubmit={handleSubmit(onSubmit)} className="mt-6">
         <FieldGroup>
@@ -112,12 +112,12 @@ function ResetPasswordForm() {
           </Field>
 
           {formError && (
-            <p role="alert" className="text-sm text-error">
+            <p role="alert" className="rounded-xl bg-error/10 px-3.5 py-2.5 text-sm font-semibold text-error">
               {formError}
             </p>
           )}
 
-          <Button type="submit" disabled={isSubmitting} className="mt-2 w-full">
+          <Button type="submit" size="lg" disabled={isSubmitting} className="mt-1 w-full">
             {isSubmitting ? t("auth.reset.submitting") : t("auth.reset.submit")}
           </Button>
         </FieldGroup>

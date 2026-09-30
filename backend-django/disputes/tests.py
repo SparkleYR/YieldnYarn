@@ -3,7 +3,9 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from notifications.models import Notification
-from orders.models import Order
+from catalog.models import Listing
+from config.models import Vertical
+from orders.models import Order, OrderAllocation
 
 from .models import Dispute
 
@@ -18,6 +20,11 @@ class DisputeViewSetTest(APITestCase):
         self.admin = User.objects.create_superuser(email="admin@example.com", password="pw12345")
 
         self.order = Order.objects.create(buyer=self.buyer, status="CONFIRMED", total_price=1000)
+        vertical = Vertical.objects.create(name="Agriculture", slug="agriculture", unit_of_measure="quintal")
+        listing = Listing.objects.create(
+            seller=self.seller, vertical=vertical, commodity_name="Wheat", quantity=10, unit="quintal", status="SOLD"
+        )
+        OrderAllocation.objects.create(order=self.order, listing=listing, allocated_quantity=10, unit_price=100)
         self.dispute = Dispute.objects.create(
             order=self.order,
             raised_by=self.buyer,
@@ -88,6 +95,36 @@ class DisputeViewSetTest(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(response.data["raised_by"], self.buyer.id)
+        self.assertTrue(
+            Notification.objects.filter(user=self.seller, related_object_id=response.data["id"]).exists()
+        )
+
+    def _raise(self, user, against, **extra):
+        self.client.force_authenticate(user=user)
+        return self.client.post(
+            "/api/disputes/",
+            {"order": self.order.id, "against": against.id, "type": "OTHER", "description": "x", **extra},
+            format="json",
+        )
+
+    def test_seller_on_the_order_can_raise_against_the_buyer(self):
+        self.assertEqual(self._raise(self.seller, self.buyer).status_code, status.HTTP_201_CREATED)
+
+    def test_stranger_cannot_raise_on_someone_elses_order(self):
+        response = self._raise(self.stranger, self.seller)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("order", response.data)
+
+    def test_against_must_be_the_other_party(self):
+        response = self._raise(self.buyer, self.stranger)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("against", response.data)
+
+    def test_new_dispute_always_starts_open(self):
+        response = self._raise(self.buyer, self.seller, status="RESOLVED", resolution_notes="self-resolved")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["status"], "OPEN")
+        self.assertEqual(response.data["resolution_notes"], "")
 
     def test_updating_status_to_resolved_sets_resolved_at(self):
         self.client.force_authenticate(user=self.seller)

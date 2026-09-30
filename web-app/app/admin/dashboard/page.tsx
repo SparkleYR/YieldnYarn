@@ -3,10 +3,11 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
-  IconShoppingBag,
-  IconPackage,
-  IconUsers,
+  IconAdjustmentsHorizontal,
   IconCurrencyRupee,
+  IconPackage,
+  IconShoppingBag,
+  IconUsers,
 } from "@tabler/icons-react";
 
 import {
@@ -19,6 +20,9 @@ import {
   type VerificationQueueItem,
 } from "@/lib/api";
 import { getStoredTokens } from "@/lib/auth";
+import { formatRupeesShort } from "@/lib/format";
+import { PageHeader, PanelHead } from "@/components/shared/page-header";
+import { QuickAction } from "@/components/shared/quick-action";
 import { StatTile } from "@/components/shared/stat-tile";
 import { PriorityBadge, StatusBadge } from "@/components/shared/status-badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -77,33 +81,46 @@ export default function AdminDashboardPage() {
 
   if (error) {
     return (
-      <div className="rounded-2xl border border-border-muted bg-surface p-8 text-center text-sm text-body">
+      <div className="state-box">
         {error}
       </div>
     );
   }
 
+  const listRow = "flex items-center justify-between gap-3 px-5 py-3.5";
+  const viewAll = (href: string) => (
+    <Link href={href} className="text-sm font-bold text-brand-primary hover:underline">
+      View all
+    </Link>
+  );
+
   return (
-    <div className="flex flex-col gap-6">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="page">
+      <PageHeader title="Admin home" subtitle="How the marketplace is doing, and what needs your attention." />
+
+      <div className="grid-tiles">
         <StatTile
-          label="Total listings"
+          label="Items listed"
           value={loading || !stats ? "…" : stats.total_listings.toLocaleString("en-IN")}
+          hint="All listings, any status"
           icon={IconShoppingBag}
         />
         <StatTile
-          label="Total orders"
+          label="Orders"
           value={loading || !stats ? "…" : stats.total_orders.toLocaleString("en-IN")}
+          hint="Made so far"
           icon={IconPackage}
         />
         <StatTile
-          label="Total users"
+          label="People"
           value={loading || !stats ? "…" : stats.total_users.toLocaleString("en-IN")}
+          hint="Buyers, sellers and staff"
           icon={IconUsers}
         />
         <StatTile
-          label="Committed revenue"
-          value={loading || !stats ? "…" : `₹${(stats.revenue / 100000).toFixed(1)}L`}
+          label="Money in orders"
+          value={loading || !stats ? "…" : formatRupeesShort(stats.revenue)}
+          hint="Confirmed and delivered orders"
           delta={
             stats?.revenue_delta_pct != null
               ? {
@@ -117,112 +134,74 @@ export default function AdminDashboardPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <div className="rounded-2xl border border-border-muted bg-surface">
-          <div className="flex items-center justify-between border-b border-border-muted p-5">
-            <h2 className="text-sm font-semibold text-heading">Verification queue</h2>
-            <Link
-              href="/admin/verification"
-              className="text-xs font-medium text-brand-primary-glow hover:underline"
-            >
-              View all
-            </Link>
-          </div>
+        <div className="panel-flush">
+          <PanelHead title="Waiting for a quality check" action={viewAll("/admin/verification")} />
           {loading ? (
             <div className="flex flex-col gap-2 p-5">
               {Array.from({ length: 3 }).map((_, i) => (
-                <Skeleton key={i} className="h-8 w-full" />
+                <Skeleton key={i} className="h-10 w-full" />
               ))}
             </div>
           ) : (
-            <ul className="divide-y divide-border-muted">
+            <ul className="divide-y divide-border">
               {pendingVerification.slice(0, 4).map((item) => (
-                <li key={item.id} className="flex items-center justify-between px-5 py-3 text-sm">
-                  <div>
-                    <p className="font-medium text-heading">{item.commodity_name}</p>
-                    <p className="text-xs text-body">{item.seller_name}</p>
+                <li key={item.id} className={listRow}>
+                  <div className="min-w-0">
+                    <p className="truncate font-bold text-heading">{item.commodity_name}</p>
+                    <p className="truncate text-sm text-muted-2">{item.seller_name}</p>
                   </div>
                   <PriorityBadge priority={item.priority} />
                 </li>
               ))}
               {pendingVerification.length === 0 && (
-                <li className="px-5 py-6 text-center text-xs text-muted-2">Queue is empty.</li>
+                <li className="px-5 py-10 text-center text-base text-body">Nothing waiting. Good job!</li>
               )}
             </ul>
           )}
         </div>
 
-        <div className="rounded-2xl border border-border-muted bg-surface">
-          <div className="flex items-center justify-between border-b border-border-muted p-5">
-            <h2 className="text-sm font-semibold text-heading">Open disputes</h2>
-            <Link
-              href="/admin/disputes"
-              className="text-xs font-medium text-brand-primary-glow hover:underline"
-            >
-              View all
-            </Link>
-          </div>
+        <div className="panel-flush">
+          <PanelHead title="Open complaints" action={viewAll("/admin/disputes")} />
           {loading ? (
             <div className="flex flex-col gap-2 p-5">
               {Array.from({ length: 3 }).map((_, i) => (
-                <Skeleton key={i} className="h-8 w-full" />
+                <Skeleton key={i} className="h-10 w-full" />
               ))}
             </div>
           ) : (
-            <ul className="divide-y divide-border-muted">
+            <ul className="divide-y divide-border">
               {openDisputes.slice(0, 4).map((dispute) => (
-                <li key={dispute.id} className="flex items-center justify-between px-5 py-3 text-sm">
-                  <div>
-                    <p className="font-medium text-heading">Order #{dispute.order}</p>
-                    <p className="text-xs text-body">{dispute.raised_by_name}</p>
+                <li key={dispute.id} className={listRow}>
+                  <div className="min-w-0">
+                    <p className="truncate font-bold text-heading">Order #{dispute.order}</p>
+                    <p className="truncate text-sm text-muted-2">From {dispute.raised_by_name}</p>
                   </div>
                   <StatusBadge status={dispute.status} />
                 </li>
               ))}
               {openDisputes.length === 0 && (
-                <li className="px-5 py-6 text-center text-xs text-muted-2">No open disputes.</li>
+                <li className="px-5 py-10 text-center text-base text-body">No open complaints.</li>
               )}
             </ul>
           )}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <QuickLink
+      <div className="grid-cards">
+        <QuickAction
           href="/admin/verticals"
-          title="Configure verticals"
-          description="Edit grading attributes and pricing rules."
+          icon={IconAdjustmentsHorizontal}
+          title="Categories & quality rules"
+          description="What gets checked for each category, and how quality changes the price."
         />
-        <QuickLink
-          href="/admin/users"
-          title="Manage users"
-          description="Review roles and account status."
-        />
-        <QuickLink
+        <QuickAction href="/admin/users" icon={IconUsers} title="People" description="See accounts and switch them on or off." />
+        <QuickAction
           href="/admin/pricing"
-          title="Enter prices"
-          description="Add manual price points for textiles."
+          icon={IconCurrencyRupee}
+          title="Market prices"
+          description="Add prices by hand where the mandi feed has none (e.g. fabric)."
         />
       </div>
     </div>
-  );
-}
-
-function QuickLink({
-  href,
-  title,
-  description,
-}: {
-  href: string;
-  title: string;
-  description: string;
-}) {
-  return (
-    <Link
-      href={href}
-      className="rounded-2xl border border-border-muted bg-surface p-5 transition-colors hover:border-brand-primary/40"
-    >
-      <h3 className="text-sm font-semibold text-heading">{title}</h3>
-      <p className="mt-1 text-xs text-body">{description}</p>
-    </Link>
   );
 }

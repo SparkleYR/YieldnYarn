@@ -78,9 +78,9 @@ export function CommandPalette({ navItems }: { navItems: DashboardNavItem[] }) {
           </CommandItem>
         </CommandGroup>
       </CommandList>
-      <div className="flex items-center justify-end gap-1 border-t border-border-muted px-3 py-2 text-xs text-muted-2">
+      <div className="flex items-center justify-end gap-1 border-t border-border px-3 py-2 text-xs text-muted-2">
         <span>{t("palette.toggleWith")}</span>
-        <CommandShortcut className="ml-0 rounded border border-border-muted px-1.5 py-0.5 font-mono">
+        <CommandShortcut className="ml-0 rounded border border-border px-1.5 py-0.5 font-mono">
           ⌘K
         </CommandShortcut>
       </div>

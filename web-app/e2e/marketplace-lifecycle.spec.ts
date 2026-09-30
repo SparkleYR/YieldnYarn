@@ -43,7 +43,7 @@ test("a graded listing flows from seller creation through verifier approval, a b
   await loginViaUi(page, verifier.email, verifier.password);
   await page.goto(`/verifier/queue/${listing.id}`);
   await expect(page.getByRole("heading", { name: commodityName })).toBeVisible();
-  await page.getByRole("button", { name: "Confirm AI Grade" }).click();
+  await page.getByRole("button", { name: "Approve", exact: true }).click();
   await expect(page).toHaveURL(/\/verifier\/queue$/);
 
   const listingAfterReview = await request.get(`${DJANGO_API_URL}/catalog/listings/${listing.id}/`, {
@@ -54,13 +54,13 @@ test("a graded listing flows from seller creation through verifier approval, a b
   // --- Buyer finds it in the catalog and bids ---
   await loginViaUi(page, buyer.email, buyer.password);
   await page.goto("/buyer/catalog");
-  await page.getByPlaceholder("Search commodity or variety…").fill(commodityName);
+  await page.getByPlaceholder("Search: wheat, rice, cotton…").fill(commodityName);
   await expect(page.getByText(commodityName)).toBeVisible();
   await page.getByText(commodityName).click();
 
   await expect(page).toHaveURL(new RegExp(`/buyer/catalog/${listing.id}$`));
-  await page.getByRole("button", { name: "Buy Now" }).click();
-  await expect(page.getByText("Offer sent to the seller at the listed price.")).toBeVisible();
+  await page.getByRole("button", { name: "Buy at this price" }).click();
+  await expect(page.getByText("Your order request has been sent to the seller.")).toBeVisible();
 
   const bidsRes = await request.get(`${DJANGO_API_URL}/orders/bids/?listing=${listing.id}`, {
     headers: { Authorization: `Bearer ${buyer.access}` },
@@ -84,7 +84,7 @@ test("a graded listing flows from seller creation through verifier approval, a b
   await page.goto("/buyer/orders");
   await page.getByRole("button", { name: /Confirmed/ }).click();
   await expect(page.getByText(commodityName)).toBeVisible();
-  await expect(page.getByText("15.00 quintal")).toBeVisible();
+  await expect(page.getByText("15 quintal", { exact: true })).toBeVisible();
 
   // The Buy Now bid offered the listing's full remaining quantity (15), so
   // acceptance should have exhausted and sold it out.

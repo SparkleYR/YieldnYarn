@@ -13,6 +13,8 @@ import {
 } from "@/lib/api";
 import { getStoredTokens } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
+import { formatQty } from "@/lib/format";
+import { PageHeader } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { PostRequirementDialog } from "@/components/buyer/post-requirement-dialog";
 import { Button } from "@/components/ui/button";
@@ -108,21 +110,18 @@ export default function RequirementsPage() {
 
   if (error) {
     return (
-      <div className="rounded-2xl border border-border-muted bg-surface p-8 text-center text-sm text-body">
+      <div className="state-box">
         {error}
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-lg font-semibold text-heading">{t("requirements.title")}</h1>
-          <p className="mt-1 text-sm text-body">
-            {t("requirements.subtitle")}
-          </p>
-        </div>
+    <div className="page">
+      <PageHeader
+        title={t("requirements.title")}
+        subtitle={t("requirements.subtitle")}
+        action={
         <PostRequirementDialog
           verticals={verticals}
           onCreate={(req) => {
@@ -133,43 +132,44 @@ export default function RequirementsPage() {
             checkForMatches(req.id, { silent: true });
           }}
         />
-      </div>
+        }
+      />
 
-      <div className="rounded-2xl border border-border-muted bg-surface">
+      <div className="panel-flush">
         <Table>
           <TableHeader>
-            <TableRow className="border-border-muted hover:bg-transparent">
-              <TableHead className="pl-5">{t("common.commodity")}</TableHead>
+            <TableRow className="hover:bg-transparent">
+              <TableHead>{t("common.commodity")}</TableHead>
               <TableHead>{t("common.quantity")}</TableHead>
               <TableHead>{t("requirements.minGrade")}</TableHead>
               <TableHead>{t("requirements.maxPrice")}</TableHead>
               <TableHead>{t("common.region")}</TableHead>
               <TableHead>{t("common.status")}</TableHead>
               <TableHead>{t("requirements.posted")}</TableHead>
-              <TableHead className="pr-5" />
+              <TableHead />
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading &&
               Array.from({ length: 3 }).map((_, i) => (
-                <TableRow key={i} className="border-border-muted hover:bg-transparent">
-                  <TableCell className="pl-5" colSpan={8}>
-                    <Skeleton className="h-5 w-full" />
+                <TableRow key={i} className="border-border hover:bg-transparent">
+                  <TableCell colSpan={8}>
+                    <Skeleton className="h-6 w-full" />
                   </TableCell>
                 </TableRow>
               ))}
             {!loading &&
               requirements.map((req) => (
-                <TableRow key={req.id} className="border-border-muted">
-                  <TableCell className="pl-5 font-medium text-heading">{req.commodity}</TableCell>
-                  <TableCell className="text-body">
-                    {req.quantity} {verticalsById.get(req.vertical)?.unit_of_measure ?? ""}
+                <TableRow key={req.id} className="border-border">
+                  <TableCell className="font-bold text-heading">{req.commodity}</TableCell>
+                  <TableCell>
+                    {formatQty(req.quantity, intlLocale)} {verticalsById.get(req.vertical)?.unit_of_measure ?? ""}
                   </TableCell>
-                  <TableCell className="text-body">{req.min_grade || "—"}</TableCell>
-                  <TableCell className="text-body">
+                  <TableCell>{req.min_grade || "—"}</TableCell>
+                  <TableCell>
                     {req.max_price ? `₹${Number(req.max_price).toLocaleString(intlLocale)}` : "—"}
                   </TableCell>
-                  <TableCell className="text-body">{req.region || "—"}</TableCell>
+                  <TableCell>{req.region || "—"}</TableCell>
                   <TableCell>
                     <StatusBadge status={req.status} />
                   </TableCell>
@@ -179,7 +179,7 @@ export default function RequirementsPage() {
                       month: "short",
                     })}
                   </TableCell>
-                  <TableCell className="pr-5 text-right">
+                  <TableCell className="text-right">
                     {req.status === "OPEN" && (
                       <Button
                         variant="outline"
@@ -194,8 +194,8 @@ export default function RequirementsPage() {
                 </TableRow>
               ))}
             {!loading && requirements.length === 0 && (
-              <TableRow className="border-border-muted hover:bg-transparent">
-                <TableCell colSpan={8} className="py-8 text-center text-sm text-muted-2">
+              <TableRow className="hover:bg-transparent">
+                <TableCell colSpan={8} className="py-12 text-center text-base whitespace-normal">
                   {t("requirements.empty")}
                 </TableCell>
               </TableRow>

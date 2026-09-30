@@ -12,7 +12,9 @@ import {
   type Vertical,
 } from "@/lib/api";
 import { getStoredTokens } from "@/lib/auth";
-import { StatusBadge } from "@/components/shared/status-badge";
+import { CommodityIcon } from "@/components/shared/commodity-icon";
+import { PageHeader } from "@/components/shared/page-header";
+import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 
 interface VerticalSummary extends Vertical {
@@ -69,22 +71,20 @@ export default function AdminVerticalsPage() {
   }, []);
 
   return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-lg font-semibold text-heading">Verticals</h1>
-        <p className="text-sm text-body">
-          Grading schemas and pricing rules that drive listings in each vertical.
-        </p>
-      </div>
+    <div className="page">
+      <PageHeader
+        title="Categories"
+        subtitle="Each category has its own quality checks (what the photo check looks at) and price rules (how quality and quantity change the price)."
+      />
 
       {error && (
-        <div className="rounded-2xl border border-border-muted bg-surface p-8 text-center text-sm text-body">
+        <div className="state-box">
           {error}
         </div>
       )}
 
       {!error && (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           {loading &&
             Array.from({ length: 2 }).map((_, i) => (
               <Skeleton key={i} className="h-32 rounded-2xl" />
@@ -95,26 +95,27 @@ export default function AdminVerticalsPage() {
               <Link
                 key={vertical.id}
                 href={`/admin/verticals/${vertical.id}`}
-                className="flex flex-col gap-3 rounded-2xl border border-border-muted bg-surface p-5 transition-colors hover:border-brand-primary/40"
+                className="panel flex h-full flex-col gap-4 transition-colors hover:border-brand-primary/60"
               >
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h2 className="text-sm font-semibold text-heading">{vertical.name}</h2>
-                    <p className="mt-1 text-xs text-body">Unit: {vertical.unit_of_measure}</p>
+                <div className="flex items-start gap-3">
+                  <CommodityIcon vertical={vertical.slug} />
+                  <div className="min-w-0 flex-1">
+                    <h2 className="panel-title">{vertical.name}</h2>
+                    <p className="text-sm text-body">Sold by the {vertical.unit_of_measure}</p>
                   </div>
-                  <IconChevronRight size={16} className="mt-0.5 shrink-0 text-muted-2" />
+                  <IconChevronRight size={22} className="mt-1 shrink-0 text-muted-2" />
                 </div>
-                <div className="flex items-center gap-4 border-t border-border-muted pt-3 text-xs text-body">
-                  <StatusBadge status={vertical.is_active ? "ACTIVE" : "DRAFT"} />
-                  <span>{vertical.gradingAttributeCount} grading attributes</span>
-                  <span>{vertical.gradeTierCount} grade tiers</span>
+                <div className="mt-auto flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border pt-4 text-sm font-semibold text-body">
+                  <Badge className={vertical.is_active ? undefined : "bg-muted text-muted-2"}>{vertical.is_active ? "Live" : "Hidden"}</Badge>
+                  <span>{vertical.gradingAttributeCount} quality checks</span>
+                  <span>{vertical.gradeTierCount} price levels</span>
                 </div>
               </Link>
             ))}
 
           {!loading && verticals.length === 0 && (
-            <div className="rounded-2xl border border-border-muted bg-surface p-8 text-center text-sm text-muted-2 sm:col-span-2">
-              No verticals configured yet.
+            <div className="state-box sm:col-span-2">
+              No categories yet. Run <code>python manage.py seed_verticals</code> to add Agriculture and Textiles.
             </div>
           )}
         </div>

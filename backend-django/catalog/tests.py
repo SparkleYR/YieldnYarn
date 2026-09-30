@@ -231,7 +231,7 @@ class VerificationQueueTest(APITestCase):
         self.assertIsNone(item["ai_grade"])
         self.assertIsNone(item["ai_confidence"])
         self.assertEqual(item["priority"], "HIGH")
-        self.assertEqual(item["flagged_reason"], "No AI grading result yet.")
+        self.assertEqual(item["flagged_reason"], "The photos have not been checked yet.")
 
     def test_excludes_listings_not_pending_verification(self):
         self._make_listing(status=Listing.Status.ACTIVE)
@@ -439,7 +439,7 @@ class VerificationReviewViewTest(APITestCase):
 
     def test_approve_activates_the_listing_and_records_a_verifier_grading_result(self):
         response = self.client.post(
-            self.url, {"decision": "APPROVE", "notes": "Looks good", "attribute_scores": {"purity": "95%"}}, format="json"
+            self.url, {"decision": "APPROVE", "notes": "Looks good", "attribute_scores": {"purity": 0.95}}, format="json"
         )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -492,6 +492,32 @@ class VerificationReviewViewTest(APITestCase):
         latest_result = GradingResult.objects.filter(listing=self.listing).order_by("-created_at").first()
         self.assertEqual(latest_result.attribute_scores, {"purity": 0.5})
 
+    def test_partial_override_keeps_the_other_scores(self):
+        GradingResult.objects.create(
+            listing=self.listing,
+            source=GradingResult.Source.AI,
+            confidence_score=0.6,
+            attribute_scores={"purity": 0.75, "moisture": 0.9},
+        )
+        self.client.post(
+            self.url, {"decision": "APPROVE", "notes": "fix", "attribute_scores": {"purity": 0.5}}, format="json"
+        )
+        latest_result = GradingResult.objects.filter(listing=self.listing).order_by("-created_at").first()
+        self.assertEqual(latest_result.attribute_scores, {"purity": 0.5, "moisture": 0.9})
+
+    def test_override_scores_must_be_numbers_between_0_and_1(self):
+        for bad in ({"purity": "90%"}, {"purity": 1.5}, {"purity": True}, ["purity"]):
+            response = self.client.post(
+                self.url, {"decision": "APPROVE", "notes": "x", "attribute_scores": bad}, format="json"
+            )
+            self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, bad)
+        self.listing.refresh_from_db()
+        self.assertEqual(self.listing.status, Listing.Status.PENDING_VERIFICATION)
+
+    def test_unknown_decision_is_rejected(self):
+        response = self.client.post(self.url, {"decision": "MAYBE"}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
     def test_reject_sends_the_listing_back_to_draft(self):
         response = self.client.post(self.url, {"decision": "REJECT", "notes": "Blurry evidence"}, format="json")
 
@@ -504,13 +530,13 @@ class VerificationReviewViewTest(APITestCase):
 
         notification = Notification.objects.get(user=self.seller)
         self.assertEqual(notification.type, Notification.Type.GRADING_COMPLETE)
-        self.assertIn("now live", notification.message)
+        self.assertIn("now for sale", notification.message)
 
     def test_notifies_the_seller_on_reject_including_notes(self):
         self.client.post(self.url, {"decision": "REJECT", "notes": "Blurry evidence"}, format="json")
 
         notification = Notification.objects.get(user=self.seller)
-        self.assertIn("sent back to draft", notification.message)
+        self.assertIn("could not be approved", notification.message)
         self.assertIn("Blurry evidence", notification.message)
 
     def test_returns_404_for_a_listing_not_in_the_queue(self):

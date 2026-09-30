@@ -21,6 +21,7 @@ import {
 } from "@/lib/api";
 import { getStoredTokens } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
+import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -101,42 +102,42 @@ export default function NotificationsPage() {
 
   if (error) {
     return (
-      <div className="mx-auto max-w-2xl rounded-2xl border border-border-muted bg-surface p-8 text-center text-sm text-body">
+      <div className="state-box">
         {error}
       </div>
     );
   }
 
   return (
-    <div className="mx-auto flex max-w-2xl flex-col gap-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-lg font-semibold text-heading">{t("notifications.title")}</h1>
-          <p className="mt-1 text-sm text-body">{t("notifications.subtitle")}</p>
-        </div>
-        {unreadCount > 0 && (
-          <Button variant="outline" size="sm" onClick={markAllRead}>
-            {t("notifications.markAll")}
-          </Button>
-        )}
-      </div>
+    <div className="page">
+      <PageHeader
+        title={t("notifications.title")}
+        subtitle={t("notifications.subtitle")}
+        action={
+          unreadCount > 0 && (
+            <Button variant="outline" onClick={markAllRead}>
+              {t("notifications.markAll")}
+            </Button>
+          )
+        }
+      />
 
       {loading && (
         <div className="flex flex-col gap-2">
           {Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton key={i} className="h-16 rounded-2xl" />
+            <Skeleton key={i} className="h-24 rounded-2xl" />
           ))}
         </div>
       )}
 
       {!loading && notifications.length === 0 && (
-        <p className="rounded-2xl border border-dashed border-border-muted p-12 text-center text-sm text-body">
+        <p className="state-box border-dashed">
           {t("notifications.empty")}
         </p>
       )}
 
       {!loading && notifications.length > 0 && (
-        <ul className="flex flex-col divide-y divide-border-muted rounded-2xl border border-border-muted bg-surface">
+        <ul className="panel-flush flex flex-col divide-y divide-border">
           {notifications.map((n) => {
             const Icon = TYPE_ICON[n.type];
             return (
@@ -145,20 +146,24 @@ export default function NotificationsPage() {
                   type="button"
                   onClick={() => !n.is_read && markRead(n.id)}
                   className={cn(
-                    "flex w-full gap-3 p-5 text-left",
-                    !n.is_read && "bg-brand-primary/5"
+                    "flex w-full gap-4 p-5 text-left transition-colors hover:bg-muted/40",
+                    !n.is_read && "bg-brand-primary-muted/40"
                   )}
                 >
-                  <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-brand-primary/10 text-brand-primary-glow">
-                    <Icon size={16} />
+                  <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-brand-primary-muted text-brand-primary">
+                    <Icon size={22} />
                   </span>
                   <div className="flex-1">
                     <div className="flex items-center justify-between gap-2">
-                      <p className="text-sm font-medium text-heading">{n.title}</p>
-                      {!n.is_read && <span className="size-2 shrink-0 rounded-full bg-brand-primary-glow" />}
+                      <p className="text-base font-bold text-heading">{n.title}</p>
+                      {!n.is_read && (
+                        <span className="rounded-full bg-brand-primary px-2 py-0.5 text-xs font-bold text-white">
+                          {t("notifications.new")}
+                        </span>
+                      )}
                     </div>
-                    <p className="mt-0.5 text-sm text-body">{n.message}</p>
-                    <p className="mt-1.5 text-xs text-muted-2">
+                    <p className="mt-1 text-[0.9375rem] text-body">{n.message}</p>
+                    <p className="mt-2 text-sm font-medium text-muted-2">
                       {new Date(n.created_at).toLocaleString(intlLocale, {
                         day: "2-digit",
                         month: "short",

@@ -16,6 +16,8 @@ import {
 import { getStoredTokens } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
 import { PriceTrendChart, type PriceTrendPoint } from "@/components/shared/price-trend-chart";
+import { formatQty } from "@/lib/format";
+import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -31,9 +33,9 @@ import {
 const NO_MIN_GRADE = "__any__";
 
 const schema = z.object({
-  vertical: z.string().min(1, "Select a vertical"),
-  commodity: z.string().min(1, "Required"),
-  quantity: z.coerce.number().positive("Must be greater than 0"),
+  vertical: z.string().min(1, "form.chooseCategory"),
+  commodity: z.string().min(1, "form.required"),
+  quantity: z.coerce.number().positive("form.positive"),
   minGrade: z.string(),
 });
 
@@ -128,24 +130,19 @@ export default function EstimatePage() {
   }
 
   return (
-    <div className="mx-auto flex max-w-4xl flex-col gap-6">
-      <div>
-        <h1 className="text-lg font-semibold text-heading">{t("estimate.title")}</h1>
-        <p className="mt-1 text-sm text-body">
-          {t("estimate.subtitle")}
-        </p>
-      </div>
+    <div className="page">
+      <PageHeader title={t("estimate.title")} subtitle={t("estimate.subtitle")} />
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
         <form
           onSubmit={handleSubmit(onSubmit)}
-          className="rounded-2xl border border-border-muted bg-surface p-5"
+          className="panel"
         >
           <FieldGroup>
             <Field data-invalid={!!errors.vertical}>
               <FieldLabel htmlFor="vertical">{t("common.vertical")}</FieldLabel>
               {verticalsLoading ? (
-                <Skeleton className="h-9 w-full" />
+                <Skeleton className="h-11 w-full" />
               ) : (
                 <Controller
                   control={control}
@@ -175,10 +172,10 @@ export default function EstimatePage() {
               <FieldError errors={errors.commodity ? [errors.commodity] : undefined} />
             </Field>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 sm:gap-3">
               <Field data-invalid={!!errors.quantity}>
                 <FieldLabel htmlFor="quantity">{t("common.quantity")}</FieldLabel>
-                <Input id="quantity" type="number" step="any" {...register("quantity")} />
+                <Input id="quantity" type="number" inputMode="decimal" step="any" {...register("quantity")} />
                 <FieldError errors={errors.quantity ? [errors.quantity] : undefined} />
               </Field>
               <Field>
@@ -193,9 +190,9 @@ export default function EstimatePage() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value={NO_MIN_GRADE}>{t("common.anyGrade")}</SelectItem>
-                        <SelectItem value="Grade A">Grade A</SelectItem>
-                        <SelectItem value="Grade B">Grade B</SelectItem>
-                        <SelectItem value="Grade C">Grade C</SelectItem>
+                        <SelectItem value="Grade A">{t("grade.A")}</SelectItem>
+                        <SelectItem value="Grade B">{t("grade.B")}</SelectItem>
+                        <SelectItem value="Grade C">{t("grade.C")}</SelectItem>
                       </SelectContent>
                     </Select>
                   )}
@@ -203,7 +200,7 @@ export default function EstimatePage() {
               </Field>
             </div>
 
-            <Button type="submit" disabled={isSubmitting || verticalsLoading} className="mt-2">
+            <Button type="submit" size="lg" disabled={isSubmitting || verticalsLoading} className="mt-1 w-full">
               {isSubmitting ? t("estimate.calculating") : t("estimate.submit")}
             </Button>
           </FieldGroup>
@@ -211,53 +208,49 @@ export default function EstimatePage() {
 
         <div className="flex flex-col gap-4">
           {error && (
-            <div className="flex h-full min-h-52 items-center justify-center rounded-2xl border border-dashed border-error/40 p-8 text-center text-sm text-error">
+            <div className="state-box min-h-64 border-dashed border-error/40 text-error">
               {error}
             </div>
           )}
 
           {!error && notFound && (
-            <div className="flex h-full min-h-52 items-center justify-center rounded-2xl border border-dashed border-border-muted p-8 text-center text-sm text-body">
+            <div className="state-box min-h-64 border-dashed">
               {t("estimate.noData")}
             </div>
           )}
 
           {!error && !notFound && estimate ? (
-            <div className="rounded-2xl border border-border-muted bg-surface p-5">
-              <p className="text-xs font-medium tracking-wide text-muted-2 uppercase">
-                {t("estimate.total")}
-              </p>
-              <p className="mt-1 text-3xl font-semibold text-heading">
+            <div className="panel">
+              <p className="text-sm font-semibold text-muted-2">{t("estimate.total")}</p>
+              <p className="mt-1 text-4xl font-extrabold tracking-tight text-heading tabular-nums">
                 ₹{estimate.total.toLocaleString(intlLocale)}
               </p>
-              <dl className="mt-4 flex flex-col gap-2 text-sm">
+              <dl className="mt-5 flex flex-col gap-2.5 border-t border-border pt-4 text-[0.9375rem]">
                 {estimate.basePrice !== null && (
                   <div className="flex justify-between">
                     <dt className="text-body">{t("common.baseMarketPrice")}</dt>
-                    <dd className="text-heading">₹{estimate.basePrice.toLocaleString(intlLocale)}</dd>
+                    <dd className="font-bold text-heading">₹{estimate.basePrice.toLocaleString(intlLocale)}</dd>
                   </div>
                 )}
                 <div className="flex justify-between">
                   <dt className="text-body">{t("estimate.adjustedUnit")}</dt>
-                  <dd className="text-heading">
-                    ₹{estimate.unitPrice.toLocaleString(intlLocale)}
-                  </dd>
+                  <dd className="font-bold text-heading">₹{estimate.unitPrice.toLocaleString(intlLocale)}</dd>
                 </div>
                 <div className="flex justify-between">
                   <dt className="text-body">{t("common.quantity")}</dt>
-                  <dd className="text-heading">{estimate.quantity}</dd>
+                  <dd className="font-bold text-heading">{formatQty(estimate.quantity, intlLocale)}</dd>
                 </div>
               </dl>
 
               {estimate.trend.length > 0 ? (
                 <>
-                  <p className="mt-5 text-xs font-medium tracking-wide text-muted-2 uppercase">
+                  <p className="mt-6 text-base font-bold text-heading">
                     {t("estimate.trend", { commodity: estimate.commodity })}
                   </p>
-                  <PriceTrendChart data={estimate.trend} className="mt-2" />
+                  <PriceTrendChart data={estimate.trend} className="mt-3" />
                 </>
               ) : (
-                <p className="mt-5 text-xs text-muted-2">
+                <p className="hint mt-5">
                   {t("estimate.noHistory")}
                 </p>
               )}
@@ -265,7 +258,7 @@ export default function EstimatePage() {
           ) : (
             !error &&
             !notFound && (
-              <div className="flex h-full min-h-52 items-center justify-center rounded-2xl border border-dashed border-border-muted p-8 text-center text-sm text-muted-2">
+              <div className="state-box min-h-64 border-dashed">
                 {t("estimate.empty")}
               </div>
             )

@@ -9,6 +9,7 @@ import { getStoredTokens } from "@/lib/auth";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PageHeader } from "@/components/shared/page-header";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Select,
@@ -109,26 +110,28 @@ export default function AdminUsersPage() {
 
   if (error) {
     return (
-      <div className="rounded-2xl border border-border-muted bg-surface p-8 text-center text-sm text-body">
+      <div className="state-box">
         {error}
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="page">
+      <PageHeader title="People" subtitle="Everyone with an account. Switch an account off to stop that person from logging in." />
+
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <div className="relative flex-1">
-          <IconSearch size={15} className="absolute top-1/2 left-2.5 -translate-y-1/2 text-muted-2" />
+          <IconSearch size={20} className="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-muted-2" />
           <Input
             placeholder="Search by name or email…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            className="pl-8"
+            className="pl-11"
           />
         </div>
         <Select value={role} onValueChange={(v) => setRole(v as UserRole | "ALL")}>
-          <SelectTrigger className="w-full sm:w-40">
+          <SelectTrigger className="w-full sm:w-48" aria-label="Role">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -141,48 +144,48 @@ export default function AdminUsersPage() {
         </Select>
       </div>
 
-      <div className="rounded-2xl border border-border-muted bg-surface">
+      <div className="panel-flush">
         <Table>
           <TableHeader>
-            <TableRow className="border-border-muted hover:bg-transparent">
-              <TableHead className="pl-5">User</TableHead>
+            <TableRow className="hover:bg-transparent">
+              <TableHead>Person</TableHead>
               <TableHead>Role</TableHead>
               <TableHead>Joined</TableHead>
-              <TableHead className="pr-5 text-right">Active</TableHead>
+              <TableHead className="text-right">Can log in</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading &&
               Array.from({ length: 4 }).map((_, i) => (
-                <TableRow key={i} className="border-border-muted hover:bg-transparent">
-                  <TableCell className="pl-5" colSpan={4}>
+                <TableRow key={i} className="border-border hover:bg-transparent">
+                  <TableCell colSpan={4}>
                     <Skeleton className="h-5 w-full" />
                   </TableCell>
                 </TableRow>
               ))}
             {!loading &&
               filtered.map((user) => (
-                <TableRow key={user.id} className="border-border-muted">
-                  <TableCell className="pl-5">
+                <TableRow key={user.id} className="border-border">
+                  <TableCell>
                     <div className="flex items-center gap-2.5">
-                      <Avatar size="sm">
+                      <Avatar size="lg">
                         <AvatarFallback>{displayName(user).slice(0, 2).toUpperCase()}</AvatarFallback>
                       </Avatar>
                       <div>
-                        <p className="font-medium text-heading">{displayName(user)}</p>
-                        <p className="text-xs text-muted-2">{user.email}</p>
+                        <p className="font-bold text-heading">{displayName(user)}</p>
+                        <p className="text-sm text-muted-2">{user.email}</p>
                       </div>
                     </div>
                   </TableCell>
-                  <TableCell className="text-body">{user.role}</TableCell>
-                  <TableCell className="text-body">
+                  <TableCell>{user.role}</TableCell>
+                  <TableCell>
                     {new Date(user.created_at).toLocaleDateString("en-IN", {
                       day: "2-digit",
                       month: "short",
                       year: "numeric",
                     })}
                   </TableCell>
-                  <TableCell className="pr-5 text-right">
+                  <TableCell className="text-right">
                     <Switch
                       checked={user.is_active}
                       onCheckedChange={() => toggleActive(user)}
@@ -192,8 +195,8 @@ export default function AdminUsersPage() {
                 </TableRow>
               ))}
             {!loading && filtered.length === 0 && (
-              <TableRow className="border-border-muted hover:bg-transparent">
-                <TableCell colSpan={4} className="py-8 text-center text-sm text-muted-2">
+              <TableRow className="hover:bg-transparent">
+                <TableCell colSpan={4} className="py-12 text-center text-base whitespace-normal">
                   No users match this filter.
                 </TableCell>
               </TableRow>

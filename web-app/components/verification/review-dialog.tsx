@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { IconCheck, IconEdit, IconX } from "@tabler/icons-react";
+import Link from "next/link";
+import { IconCheck, IconExternalLink, IconX } from "@tabler/icons-react";
 
 import type { VerificationQueueItem } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -18,12 +19,11 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
-export type ReviewAction = "CONFIRMED" | "OVERRIDDEN" | "REJECTED";
+export type ReviewAction = "CONFIRMED" | "REJECTED";
 
 const ACTIONS: { value: ReviewAction; label: string; icon: typeof IconCheck; notesRequired: boolean }[] = [
-  { value: "CONFIRMED", label: "Confirm AI grade", icon: IconCheck, notesRequired: false },
-  { value: "OVERRIDDEN", label: "Override", icon: IconEdit, notesRequired: true },
-  { value: "REJECTED", label: "Reject listing", icon: IconX, notesRequired: true },
+  { value: "CONFIRMED", label: "Approve", icon: IconCheck, notesRequired: false },
+  { value: "REJECTED", label: "Send back to seller", icon: IconX, notesRequired: true },
 ];
 
 /**
@@ -86,47 +86,46 @@ export function ReviewDialog({
           <DialogDescription>{item.flagged_reason}</DialogDescription>
         </DialogHeader>
 
-        <div className="flex flex-col gap-3">
-          <div className="flex items-center justify-between rounded-lg border border-border-muted px-3 py-2">
-            <span className="text-xs text-body">AI grade: {item.ai_grade ?? "Ungraded"}</span>
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-border px-4 py-3">
+            <span className="text-[0.9375rem] font-semibold text-body">
+              Photo check says: <span className="font-extrabold text-heading">{item.ai_grade ?? "No grade"}</span>
+            </span>
             {item.ai_confidence !== null && <ConfidenceBar value={item.ai_confidence} />}
           </div>
 
-          <div className="rounded-lg border border-border-muted">
+          <div className="rounded-xl border border-border">
             {item.attribute_scores.map((score, i) => (
               <div
                 key={score.attribute}
                 className={cn(
-                  "flex items-center justify-between px-3 py-2 text-xs",
-                  i > 0 && "border-t border-border-muted"
+                  "flex items-center justify-between gap-3 px-4 py-3 text-[0.9375rem]",
+                  i > 0 && "border-t border-border"
                 )}
               >
-                <span className="text-body">{score.attribute}</span>
-                <div className="flex items-center gap-3">
-                  <span className="text-heading">{score.ai_value}</span>
-                  <ConfidenceBar value={score.ai_confidence} />
-                </div>
+                <span className="font-semibold text-heading">{score.attribute.replace(/_/g, " ")}</span>
+                <ConfidenceBar value={score.ai_confidence} />
               </div>
             ))}
             {item.attribute_scores.length === 0 && (
-              <p className="px-3 py-2 text-xs text-muted-2">No attribute scores yet.</p>
+              <p className="px-4 py-3 text-sm text-muted-2">No scores yet.</p>
             )}
           </div>
 
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-2">
             {ACTIONS.map((a) => (
               <button
                 key={a.value}
                 type="button"
                 onClick={() => setAction(a.value)}
                 className={cn(
-                  "flex flex-col items-center gap-1 rounded-lg border px-2 py-2.5 text-xs font-medium transition-colors",
+                  "flex min-h-12 items-center justify-center gap-2 rounded-xl border-2 px-3 py-2.5 text-[0.9375rem] font-bold transition-colors",
                   action === a.value
-                    ? "border-brand-primary bg-brand-primary/10 text-brand-primary-glow"
-                    : "border-border-muted text-body hover:border-brand-primary/40"
+                    ? "border-brand-primary bg-brand-primary-muted text-brand-primary-hover"
+                    : "border-border text-body hover:border-input"
                 )}
               >
-                <a.icon size={16} />
+                <a.icon size={20} />
                 {a.label}
               </button>
             ))}
@@ -134,16 +133,14 @@ export function ReviewDialog({
 
           <Field data-invalid={activeAction.notesRequired && notes.trim().length === 0}>
             <FieldLabel htmlFor="review-notes">
-              Notes {activeAction.notesRequired ? "(required)" : "(optional)"}
+              Note for the seller {activeAction.notesRequired ? "(needed)" : "(optional)"}
             </FieldLabel>
             <Textarea
               id="review-notes"
               placeholder={
                 action === "REJECTED"
-                  ? "Why is this listing being rejected?"
-                  : action === "OVERRIDDEN"
-                    ? "What should the grade be, and why?"
-                    : "Add a note for the record…"
+                  ? "What should the seller fix? e.g. add a clear daylight photo."
+                  : "Anything to remember about this check…"
               }
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
@@ -151,9 +148,15 @@ export function ReviewDialog({
           </Field>
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="sm:justify-between">
+          <Button variant="ghost" asChild>
+            <Link href={`/verifier/queue/${item.listing_id}`}>
+              <IconExternalLink />
+              See photos & correct scores
+            </Link>
+          </Button>
           <Button onClick={handleSubmit} disabled={!canSubmit || submitting}>
-            {submitting ? "Submitting…" : "Submit"}
+            {submitting ? "Saving…" : "Save"}
           </Button>
         </DialogFooter>
       </DialogContent>

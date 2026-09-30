@@ -49,11 +49,11 @@ test("buyer accepts a seller's counter-offer and gets an order at the counter pr
 
   const card = page.getByTestId(`offer-${counter.id}`);
   await expect(card).toContainText(commodityName);
-  await expect(card).toContainText("Counter-offer from the seller");
+  await expect(card).toContainText("The seller sent a new price");
   await expect(card).toContainText("Meet me at 2400");
   await card.getByRole("button", { name: /^Accept/ }).click();
 
-  await expect(page.getByText("Offer accepted — your order has been created.")).toBeVisible();
+  await expect(page.getByText("Done! Your order has been made.")).toBeVisible();
 
   const ordersRes = await request.get(`${DJANGO_API_URL}/orders/orders/`, {
     headers: { Authorization: `Bearer ${buyer.access}` },
@@ -68,8 +68,8 @@ test("buyer accepts a seller's counter-offer and gets an order at the counter pr
   expect(Number(((await listingRes.json()) as { quantity: string }).quantity)).toBe(30);
 
   // The original bid now shows as countered in the Closed tab.
-  await page.getByRole("tab", { name: /Closed/ }).click();
-  await expect(page.getByTestId(`offer-${bid.id}`)).toContainText("Countered");
+  await page.getByRole("tab", { name: /Finished/ }).click();
+  await expect(page.getByTestId(`offer-${bid.id}`)).toContainText("New price sent");
 });
 
 test("a buyer can counter back, which puts the ball in the seller's court", async ({ page, request }) => {
@@ -107,12 +107,12 @@ test("a buyer can counter back, which puts the ball in the seller's court", asyn
   await loginViaUi(page, buyer.email, buyer.password);
   await page.goto("/buyer/offers");
   const card = page.getByTestId(`offer-${counter.id}`);
-  await card.getByRole("button", { name: "Counter" }).click();
+  await card.getByRole("button", { name: "Send a new price" }).click();
   await card.getByLabel(/Price per quintal/).fill("2750");
-  await card.getByRole("button", { name: "Send counter-offer" }).click();
-  await expect(page.getByText("Counter-offer sent to the seller.")).toBeVisible();
+  await card.getByRole("button", { name: "Send new price" }).click();
+  await expect(page.getByText("Your new price has been sent to the seller.")).toBeVisible();
 
-  await page.getByRole("tab", { name: /Waiting on seller/ }).click();
+  await page.getByRole("tab", { name: /Waiting for seller/ }).click();
   await expect(page.getByText("₹2,750 / quintal")).toBeVisible();
 
   const sellerBids = (await (

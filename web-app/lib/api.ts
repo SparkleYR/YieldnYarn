@@ -363,8 +363,9 @@ export interface CreatePricePointPayload {
 }
 
 /** GET /api/pricing/price-points/ — any authenticated user. */
-export function listPricePoints(token: string) {
-  return djangoApi.get<Paginated<PricePoint>>("/pricing/price-points/", { token });
+export function listPricePoints(token: string, filters?: { source?: PricePoint["source"] }) {
+  const query = filters?.source ? `?source=${encodeURIComponent(filters.source)}` : "";
+  return djangoApi.get<Paginated<PricePoint>>(`/pricing/price-points/${query}`, { token });
 }
 
 /** POST /api/pricing/price-points/ — admin only (IsAdminOrReadOnly). */
@@ -410,7 +411,7 @@ export type ReviewDecision = "APPROVE" | "REJECT";
 export interface SubmitReviewPayload {
   decision: ReviewDecision;
   notes: string;
-  attribute_scores?: Record<string, string>;
+  attribute_scores?: Record<string, number>;
 }
 
 /** POST /api/verification/queue/{listing_id}/review/ — Verifier/Admin only. */
@@ -558,6 +559,7 @@ export interface OrderAllocation {
   listing: number;
   commodity_name: string;
   unit: string;
+  seller: number;
   seller_name: string;
   allocated_quantity: string;
   unit_price: string;
@@ -697,6 +699,14 @@ export interface Dispute {
 /** GET /api/disputes/ — scoped to the current user (party) or all (admin). */
 export function listDisputes(token: string) {
   return djangoApi.get<Paginated<Dispute>>("/disputes/", { token });
+}
+
+/** POST /api/disputes/ — a party to the order reports a problem against the other party. */
+export function createDispute(
+  payload: Pick<Dispute, "order" | "against" | "type" | "description">,
+  token: string
+) {
+  return djangoApi.post<Dispute>("/disputes/", payload, { token });
 }
 
 /** PATCH /api/disputes/{id}/ */

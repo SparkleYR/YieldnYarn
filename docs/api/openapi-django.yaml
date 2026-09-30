@@ -2674,6 +2674,9 @@ components:
         unit:
           type: string
           readOnly: true
+        seller:
+          type: integer
+          readOnly: true
         seller_name:
           type: string
           readOnly: true
@@ -2693,6 +2696,7 @@ components:
       - id
       - listing
       - order
+      - seller
       - seller_name
       - unit
       - unit_price

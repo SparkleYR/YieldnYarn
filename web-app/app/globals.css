@@ -47,24 +47,32 @@
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
 
-  /* === MSME Marketplace Color Palette (referenced directly in components) === */
-  --color-surface: #171717;
-  --color-surface-elevated: #1f1f1f;
-  --color-border-muted: #1a1a1a;
-  --color-brand-primary: #10b981;
-  --color-brand-primary-hover: #059669;
-  --color-brand-primary-glow: #34d399;
-  --color-brand-primary-muted: rgba(16, 185, 129, 0.15);
-  --color-heading: #ffffff;
-  --color-body: #a3a3a3;
-  --color-muted-2: #737373;
-  --color-natural-white: #fafafa;
-  --color-offwhite: #f5f5f0;
-  --color-offwhite-surface: #e8e8e3;
-  --color-success: #22c55e;
-  --color-warning: #f59e0b;
-  --color-error: #ef4444;
-  --color-info: #3b82f6;
+  /* === YieldnYarn palette (light). Referenced directly in components. ===
+     Text colours all pass WCAG AA on white; the brand green is emerald-700
+     so white text on it passes too (the lighter emerald-500 would not). */
+  --color-surface: #ffffff;
+  --color-surface-elevated: #f3f5ef;
+  --color-border-muted: #e2e6dc;
+  --color-brand-primary: #047857;
+  --color-brand-primary-hover: #065f46;
+  --color-brand-primary-glow: #047857;
+  --color-brand-primary-muted: #e3f4ec;
+  --color-heading: #111a15;
+  --color-body: #34403a;
+  --color-muted-2: #5b665f;
+  --color-natural-white: #ffffff;
+  --color-offwhite: #f6f7f2;
+  --color-offwhite-surface: #eceee6;
+  --color-success: #15803d;
+  --color-warning: #b45309;
+  --color-error: #b91c1c;
+  --color-info: #1d4ed8;
+
+  /* Type scale nudged up for readability: 13 / 15 / 16 px instead of 12 / 14 / 16. */
+  --text-xs: 0.8125rem;
+  --text-xs--line-height: 1.15rem;
+  --text-sm: 0.9375rem;
+  --text-sm--line-height: 1.4rem;
 
   --max-w-container: 1280px;
 
@@ -72,170 +80,43 @@
   --duration-normal: 400ms;
   --duration-slow: 600ms;
   --ease-out-msme: cubic-bezier(0.16, 1, 0.3, 1);
-
-  --animate-marquee: marquee var(--duration) infinite linear;
-  --animate-marquee-vertical: marquee-vertical var(--duration) linear infinite;
-  @keyframes marquee {
-  from {
-    transform: translateX(0);
-    }
-  to {
-    transform: translateX(calc(-100% - var(--gap)));
-    }
-  }
-  @keyframes marquee-vertical {
-  from {
-    transform: translateY(0);
-    }
-  to {
-    transform: translateY(calc(-100% - var(--gap)));
-    }
-  }
-  --animate-shimmer-slide: shimmer-slide var(--speed) ease-in-out infinite alternate;
-  --animate-spin-around: spin-around calc(var(--speed) * 2) infinite linear
-;
-  @keyframes shimmer-slide {
-  to {
-    transform: translate(calc(100cqw - 100%), 0);}}
-  @keyframes spin-around {
-  0% {
-    transform: translateZ(0) rotate(0);}
-  15%, 35% {
-    transform: translateZ(0) rotate(90deg);}
-  65%, 85% {
-    transform: translateZ(0) rotate(270deg);}
-  100% {
-    transform: translateZ(0) rotate(360deg);}}
-
-  /* === Custom keyframes for Aceternity components === */
-  @keyframes spotlight {
-    0% {
-      opacity: 0;
-      transform: translate(-72%, -62%) scale(0.5);
-    }
-    100% {
-      opacity: 1;
-      transform: translate(-50%, -40%) scale(1);
-    }
-  }
-  --animate-spotlight: spotlight 2s ease-out forwards;
-
-  @keyframes shimmer {
-    from {
-      background-position: 0 0;
-    }
-    to {
-      background-position: -200% 0;
-    }
-  }
-  --animate-shimmer: shimmer 2s linear infinite;
-
-  @keyframes meteor {
-    0% {
-      transform: rotate(215deg) translateX(0);
-      opacity: 1;
-    }
-    70% {
-      opacity: 1;
-    }
-    100% {
-      transform: rotate(215deg) translateX(-500px);
-      opacity: 0;
-    }
-  }
-  --animate-meteor: meteor 5s linear infinite;
-
-  @keyframes border-beam-move {
-    100% {
-      offset-distance: 100%;
-    }
-  }
-
-  @keyframes move {
-    0% {
-      transform: translateX(-50%) translateY(-50%);
-    }
-    100% {
-      transform: translateX(50%) translateY(50%);
-    }
-  }
-  --animate-move: move 5s linear infinite;
-
-  @keyframes scroll {
-    to {
-      transform: translate(calc(-50% - 0.5rem));
-    }
-  }
-  --animate-scroll: scroll var(--animation-duration, 40s) var(--animation-direction, forwards) linear infinite;
 }
 
 :root {
-  --background: #0a0a0a;
-  --foreground: #fafafa;
-  --card: #171717;
-  --card-foreground: #fafafa;
-  --popover: #171717;
-  --popover-foreground: #fafafa;
-  --primary: #10b981;
+  --background: #f6f7f2;
+  --foreground: #111a15;
+  --card: #ffffff;
+  --card-foreground: #111a15;
+  --popover: #ffffff;
+  --popover-foreground: #111a15;
+  --primary: #047857;
   --primary-foreground: #ffffff;
-  --secondary: #1f1f1f;
-  --secondary-foreground: #fafafa;
-  --muted: #171717;
-  --muted-foreground: #a3a3a3;
-  --accent: #1f1f1f;
-  --accent-foreground: #fafafa;
-  --destructive: #ef4444;
-  --border: #262626;
-  --input: #262626;
-  --ring: #10b981;
-  --chart-1: #10b981;
-  --chart-2: #34d399;
-  --chart-3: #059669;
-  --chart-4: #a3a3a3;
-  --chart-5: #737373;
+  --secondary: #eceee6;
+  --secondary-foreground: #111a15;
+  --muted: #eef0e9;
+  --muted-foreground: #5b665f;
+  --accent: #e3f4ec;
+  --accent-foreground: #064e3b;
+  --destructive: #b91c1c;
+  --border: #dde2d6;
+  --input: #c9d0c3;
+  --ring: #059669;
+  --chart-1: #047857;
+  --chart-2: #10b981;
+  --chart-3: #b45309;
+  --chart-4: #1d4ed8;
+  --chart-5: #5b665f;
   --radius: 0.75rem;
-  --sidebar: #111111;
-  --sidebar-foreground: #fafafa;
-  --sidebar-primary: #10b981;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #111a15;
+  --sidebar-primary: #047857;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #1f1f1f;
-  --sidebar-accent-foreground: #fafafa;
-  --sidebar-border: #262626;
-  --sidebar-ring: #10b981;
-}
-
-.dark {
-  --background: #0a0a0a;
-  --foreground: #fafafa;
-  --card: #171717;
-  --card-foreground: #fafafa;
-  --popover: #171717;
-  --popover-foreground: #fafafa;
-  --primary: #10b981;
-  --primary-foreground: #ffffff;
-  --secondary: #1f1f1f;
-  --secondary-foreground: #fafafa;
-  --muted: #171717;
-  --muted-foreground: #a3a3a3;
-  --accent: #1f1f1f;
-  --accent-foreground: #fafafa;
-  --destructive: #ef4444;
-  --border: #262626;
-  --input: #262626;
-  --ring: #10b981;
-  --chart-1: #10b981;
-  --chart-2: #34d399;
-  --chart-3: #059669;
-  --chart-4: #a3a3a3;
-  --chart-5: #737373;
-  --sidebar: #111111;
-  --sidebar-foreground: #fafafa;
-  --sidebar-primary: #10b981;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #1f1f1f;
-  --sidebar-accent-foreground: #fafafa;
-  --sidebar-border: #262626;
-  --sidebar-ring: #10b981;
+  --sidebar-accent: #e3f4ec;
+  --sidebar-accent-foreground: #064e3b;
+  --sidebar-border: #e2e6dc;
+  --sidebar-ring: #059669;
+  --shadow-panel: 0 1px 2px rgb(17 26 21 / 0.04), 0 1px 3px rgb(17 26 21 / 0.04);
+  color-scheme: light;
 }
 
 @layer base {
@@ -244,17 +125,66 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-weight: 500;
+  }
+  h1, h2, h3, h4 {
+    @apply text-heading;
+    font-weight: 700;
   }
   html {
     @apply font-sans scroll-smooth;
   }
 }
 
+/* One look for every card-like box, page header and section, so spacing and
+   type are identical on every screen. */
+@layer components {
+  .page {
+    @apply mx-auto flex w-full max-w-6xl flex-col gap-6;
+  }
+  .page-header {
+    @apply flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between;
+  }
+  .page-title {
+    @apply text-2xl font-extrabold tracking-tight text-heading sm:text-[1.75rem];
+  }
+  .page-subtitle {
+    @apply mt-1.5 max-w-2xl text-base text-body;
+  }
+  .panel {
+    @apply rounded-2xl border border-border bg-card p-5 shadow-(--shadow-panel);
+  }
+  .state-box {
+    @apply flex flex-col items-center justify-center gap-3 rounded-2xl border border-border bg-card px-6 py-12 text-center text-base font-medium text-body;
+  }
+  .panel-flush {
+    @apply overflow-hidden rounded-2xl border border-border bg-card shadow-(--shadow-panel);
+  }
+  .panel-title {
+    @apply text-lg font-bold text-heading;
+  }
+  .panel-subtitle {
+    @apply mt-1 text-sm text-body;
+  }
+  .panel-head {
+    @apply flex items-center justify-between gap-3 border-b border-border px-5 py-4;
+  }
+  .field-label {
+    @apply text-sm font-semibold text-heading;
+  }
+  .hint {
+    @apply text-sm text-muted-2;
+  }
+  .grid-tiles {
+    @apply grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4;
+  }
+  .grid-cards {
+    @apply grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3;
+  }
+}
+
 @layer utilities {
   .text-balance {
     text-wrap: balance;
-  }
-  .mask-radial-fade {
-    mask-image: radial-gradient(ellipse at center, black 40%, transparent 75%);
   }
 }

@@ -12,7 +12,7 @@ test.describe("Command palette", () => {
     await expect(page.getByPlaceholder("Type a page name or command…")).toBeVisible();
 
     await page.keyboard.type("Orders");
-    await page.getByRole("option", { name: "Orders" }).click();
+    await page.getByRole("option", { name: "My orders" }).click();
 
     await expect(page).toHaveURL(/\/buyer\/orders/);
     await expect(page.getByPlaceholder("Type a page name or command…")).not.toBeVisible();

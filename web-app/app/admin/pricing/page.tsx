@@ -16,6 +16,8 @@ import {
   type Vertical,
 } from "@/lib/api";
 import { getStoredTokens } from "@/lib/auth";
+import { PageHeader } from "@/components/shared/page-header";
+import { SegmentedTabs } from "@/components/shared/segmented-tabs";
 import { StatTile } from "@/components/shared/stat-tile";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,22 +47,29 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const schema = z.object({
-  vertical: z.coerce.number().int().positive("Select a vertical"),
-  commodity: z.string().min(1, "Required"),
-  region: z.string().min(1, "Required"),
-  price: z.coerce.number().positive("Must be greater than 0"),
-  unit: z.string().min(1, "Required"),
+  vertical: z.coerce.number().int().positive("form.chooseCategory"),
+  commodity: z.string().min(1, "form.required"),
+  region: z.string().min(1, "form.required"),
+  price: z.coerce.number().positive("form.positive"),
+  unit: z.string().min(1, "form.required"),
 });
 
 type FormInput = z.input<typeof schema>;
 type FormValues = z.output<typeof schema>;
 
+const SOURCE_LABELS: Record<string, string> = {
+  ADMIN_ENTERED: "Added by hand",
+  AGMARKNET: "Mandi feed (Agmarknet)",
+  CCI: "Cotton Corporation (CCI)",
+};
+
 export default function AdminPricingPage() {
   const [verticals, setVerticals] = useState<Vertical[]>([]);
   const [entries, setEntries] = useState<PricePoint[]>([]);
+  // Totals come from the API's counts: `entries` is only the latest page.
+  const [totals, setTotals] = useState({ all: 0, manual: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<string>("all"); // "all" | vertical slug
@@ -91,13 +100,15 @@ export default function AdminPricingPage() {
       setError(null);
     }
     try {
-      const [verticalsRes, pricePointsRes] = await Promise.all([
+      const [verticalsRes, pricePointsRes, manualRes] = await Promise.all([
         listVerticals(token),
         listPricePoints(token),
+        listPricePoints(token, { source: "ADMIN_ENTERED" }),
       ]);
       if (!isCancelled()) {
         setVerticals(verticalsRes.results);
         setEntries(pricePointsRes.results);
+        setTotals({ all: pricePointsRes.count, manual: manualRes.count });
       }
     } catch (err) {
       if (!isCancelled()) {
@@ -133,7 +144,6 @@ export default function AdminPricingPage() {
     [entries, filter, verticalsById]
   );
 
-  const manualCount = entries.filter((e) => e.source === "ADMIN_ENTERED").length;
 
   async function onSubmit(values: FormValues) {
     const token = getStoredTokens()?.access;
@@ -155,6 +165,7 @@ export default function AdminPricingPage() {
         token
       );
       setEntries((prev) => [created, ...prev]);
+      setTotals((prev) => ({ all: prev.all + 1, manual: prev.manual + 1 }));
       toast.success("Price point added.");
       reset();
       setOpen(false);
@@ -171,54 +182,54 @@ export default function AdminPricingPage() {
 
   if (error) {
     return (
-      <div className="rounded-2xl border border-border-muted bg-surface p-8 text-center text-sm text-body">
+      <div className="state-box">
         {error}
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="page">
+      <PageHeader
+        title="Market prices"
+        subtitle="The prices sellers and buyers see as “today's market price”. Mandi prices arrive automatically; add the rest by hand."
+      />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <StatTile label="Tracked price points" value={loading ? "…" : String(entries.length)} />
-        <StatTile label="Manually entered" value={loading ? "…" : String(manualCount)} />
+        <StatTile label="All prices" value={loading ? "…" : totals.all.toLocaleString("en-IN")} hint="Every price we have" />
+        <StatTile label="Added by hand" value={loading ? "…" : totals.manual.toLocaleString("en-IN")} hint="Entered on this page" />
         <StatTile
-          label="Ingested (AGMARKNET/CCI)"
-          value={loading ? "…" : String(entries.length - manualCount)}
+          label="From the mandi feed"
+          value={loading ? "…" : (totals.all - totals.manual).toLocaleString("en-IN")}
+          hint="Agmarknet / CCI, updated every 6 hours"
         />
       </div>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <Tabs value={filter} onValueChange={setFilter}>
-          <TabsList>
-            <TabsTrigger value="all">All</TabsTrigger>
-            {verticals.map((v) => (
-              <TabsTrigger key={v.id} value={v.slug}>
-                {v.name}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
+        <SegmentedTabs
+          tabs={[{ id: "all", label: "All" }, ...verticals.map((v) => ({ id: v.slug, label: v.name }))]}
+          value={filter}
+          onChange={setFilter}
+        />
 
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
             <Button disabled={verticals.length === 0}>
               <IconPlus />
-              Add price point
+              Add a price
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-md">
+          <DialogContent>
             <DialogHeader>
-              <DialogTitle>Add a price point</DialogTitle>
+              <DialogTitle>Add a price</DialogTitle>
               <DialogDescription>
-                Used for verticals without an automated ingestion job (e.g. textiles).
+                For crops or products the mandi feed does not cover, such as fabric.
               </DialogDescription>
             </DialogHeader>
 
             <form id="price-form" onSubmit={handleSubmit(onSubmit)}>
               <FieldGroup>
                 <Field data-invalid={!!errors.vertical}>
-                  <FieldLabel htmlFor="vertical">Vertical</FieldLabel>
+                  <FieldLabel htmlFor="vertical">Category</FieldLabel>
                   <Controller
                     control={control}
                     name="vertical"
@@ -228,7 +239,7 @@ export default function AdminPricingPage() {
                         onValueChange={(v) => field.onChange(Number(v))}
                       >
                         <SelectTrigger id="vertical" className="w-full">
-                          <SelectValue placeholder="Select a vertical" />
+                          <SelectValue placeholder="Choose a category" />
                         </SelectTrigger>
                         <SelectContent>
                           {verticals.map((v) => (
@@ -244,18 +255,18 @@ export default function AdminPricingPage() {
                 </Field>
 
                 <Field data-invalid={!!errors.commodity}>
-                  <FieldLabel htmlFor="commodity">Commodity</FieldLabel>
+                  <FieldLabel htmlFor="commodity">Crop or product</FieldLabel>
                   <Input id="commodity" placeholder="Cotton Fabric" {...register("commodity")} />
                   <FieldError errors={errors.commodity ? [errors.commodity] : undefined} />
                 </Field>
 
                 <Field data-invalid={!!errors.region}>
-                  <FieldLabel htmlFor="region">Region</FieldLabel>
+                  <FieldLabel htmlFor="region">Place (state)</FieldLabel>
                   <Input id="region" placeholder="Surat, Gujarat" {...register("region")} />
                   <FieldError errors={errors.region ? [errors.region] : undefined} />
                 </Field>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 sm:gap-3">
                   <Field data-invalid={!!errors.price}>
                     <FieldLabel htmlFor="price">Price (₹)</FieldLabel>
                     <Input id="price" type="number" step="any" {...register("price")} />
@@ -279,36 +290,36 @@ export default function AdminPricingPage() {
         </Dialog>
       </div>
 
-      <div className="rounded-2xl border border-border-muted bg-surface">
+      <div className="panel-flush">
         <Table>
           <TableHeader>
-            <TableRow className="border-border-muted hover:bg-transparent">
-              <TableHead className="pl-5">Commodity</TableHead>
-              <TableHead>Region</TableHead>
+            <TableRow className="hover:bg-transparent">
+              <TableHead>Crop or product</TableHead>
+              <TableHead>Place</TableHead>
               <TableHead>Price</TableHead>
               <TableHead>Source</TableHead>
-              <TableHead className="pr-5 text-right">Updated</TableHead>
+              <TableHead className="text-right">Updated</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading &&
               Array.from({ length: 4 }).map((_, i) => (
-                <TableRow key={i} className="border-border-muted hover:bg-transparent">
-                  <TableCell className="pl-5" colSpan={5}>
+                <TableRow key={i} className="border-border hover:bg-transparent">
+                  <TableCell colSpan={5}>
                     <Skeleton className="h-5 w-full" />
                   </TableCell>
                 </TableRow>
               ))}
             {!loading &&
               visible.map((entry) => (
-                <TableRow key={entry.id} className="border-border-muted">
-                  <TableCell className="pl-5 font-medium text-heading">{entry.commodity}</TableCell>
-                  <TableCell className="text-body">{entry.region}</TableCell>
+                <TableRow key={entry.id} className="border-border">
+                  <TableCell className="font-bold text-heading">{entry.commodity}</TableCell>
+                  <TableCell>{entry.region}</TableCell>
                   <TableCell className="text-heading">
                     ₹{Number(entry.price).toLocaleString("en-IN")} / {unitFor(entry)}
                   </TableCell>
-                  <TableCell className="text-body">{entry.source}</TableCell>
-                  <TableCell className="pr-5 text-right text-xs text-muted-2">
+                  <TableCell>{SOURCE_LABELS[entry.source] ?? entry.source}</TableCell>
+                  <TableCell className="text-right text-sm text-muted-2">
                     {new Date(entry.timestamp).toLocaleDateString("en-IN", {
                       day: "2-digit",
                       month: "short",
@@ -317,8 +328,8 @@ export default function AdminPricingPage() {
                 </TableRow>
               ))}
             {!loading && visible.length === 0 && (
-              <TableRow className="border-border-muted hover:bg-transparent">
-                <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-2">
+              <TableRow className="hover:bg-transparent">
+                <TableCell colSpan={5} className="py-12 text-center text-base whitespace-normal">
                   No price points yet.
                 </TableCell>
               </TableRow>

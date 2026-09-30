@@ -22,8 +22,8 @@ import {
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 
 const schema = z.object({
-  offered_price: z.coerce.number().positive("Must be greater than 0"),
-  offered_quantity: z.coerce.number().positive("Must be greater than 0"),
+  offered_price: z.coerce.number().positive("form.positive"),
+  offered_quantity: z.coerce.number().positive("form.positive"),
 });
 
 type FormInput = z.input<typeof schema>;
@@ -92,16 +92,16 @@ export function ListingActions({ listing, price }: { listing: Listing; price: nu
   }
 
   return (
-    <div className="flex flex-col gap-2">
-      <Button className="w-full" onClick={buyNow} disabled={buying}>
+    <div className="flex flex-col gap-2.5">
+      <Button size="lg" className="w-full" onClick={buyNow} disabled={buying}>
         {buying ? t("listing.sending") : t("listing.buyNow")}
       </Button>
-      <Button variant="outline" className="w-full" onClick={() => setBidOpen(true)}>
+      <Button size="lg" variant="outline" className="w-full" onClick={() => setBidOpen(true)}>
         {t("listing.placeBid")}
       </Button>
 
       <Dialog open={bidOpen} onOpenChange={setBidOpen}>
-        <DialogContent className="sm:max-w-sm">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>{t("listing.bidDialogTitle")}</DialogTitle>
             <DialogDescription>
@@ -113,12 +113,12 @@ export function ListingActions({ listing, price }: { listing: Listing; price: nu
             <FieldGroup>
               <Field data-invalid={!!errors.offered_price}>
                 <FieldLabel htmlFor="offered_price">{t("listing.offeredPrice", { unit: listing.unit })}</FieldLabel>
-                <Input id="offered_price" type="number" step="any" {...register("offered_price")} />
+                <Input id="offered_price" type="number" inputMode="decimal" step="any" {...register("offered_price")} />
                 <FieldError errors={errors.offered_price ? [errors.offered_price] : undefined} />
               </Field>
               <Field data-invalid={!!errors.offered_quantity}>
                 <FieldLabel htmlFor="offered_quantity">{t("listing.offeredQuantity", { unit: listing.unit })}</FieldLabel>
-                <Input id="offered_quantity" type="number" step="any" {...register("offered_quantity")} />
+                <Input id="offered_quantity" type="number" inputMode="decimal" step="any" {...register("offered_quantity")} />
                 <FieldError errors={errors.offered_quantity ? [errors.offered_quantity] : undefined} />
               </Field>
             </FieldGroup>

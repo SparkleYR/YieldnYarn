@@ -198,20 +198,17 @@ export function VerticalEditor({
   }
 
   return (
-    <div className="mx-auto flex max-w-4xl flex-col gap-6">
-      <div className="flex items-start justify-between gap-4">
+    <div className="page">
+      <Link href="/admin/verticals" className="flex w-fit items-center gap-1.5 text-sm font-bold text-brand-primary hover:underline">
+        <IconArrowLeft size={18} />
+        All categories
+      </Link>
+      <div className="page-header">
         <div>
-          <Link
-            href="/admin/verticals"
-            className="mb-2 inline-flex items-center gap-1 text-xs font-medium text-muted-2 hover:text-body"
-          >
-            <IconArrowLeft size={14} />
-            Verticals
-          </Link>
-          <h1 className="text-lg font-semibold text-heading">{vertical.name}</h1>
-          <p className="text-sm text-body">Unit of measure: {vertical.unit_of_measure}</p>
+          <h1 className="page-title">{vertical.name}</h1>
+          <p className="page-subtitle">Sold by the {vertical.unit_of_measure}. Change what is checked and how price follows quality.</p>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
           <Button variant={preview ? "secondary" : "outline"} onClick={() => setPreview((p) => !p)}>
             <IconEye />
             {preview ? "Editing" : "Preview"}
@@ -231,18 +228,18 @@ export function VerticalEditor({
       ) : (
         <Tabs defaultValue="attributes">
           <TabsList>
-            <TabsTrigger value="attributes">Grading attributes</TabsTrigger>
-            <TabsTrigger value="pricing">Pricing rules</TabsTrigger>
+            <TabsTrigger value="attributes">Quality checks</TabsTrigger>
+            <TabsTrigger value="pricing">Price rules</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="attributes" className="flex flex-col gap-3">
-            <div className="rounded-2xl border border-border-muted bg-surface">
-              <div className="grid grid-cols-[1fr_auto_auto_auto_1fr_auto] gap-3 border-b border-border-muted px-4 py-2.5 text-xs font-medium text-muted-2">
-                <span>Attribute</span>
-                <span>Type</span>
-                <span>ML-graded</span>
-                <span>Weight</span>
-                <span>Range</span>
+          <TabsContent value="attributes" className="mt-2 flex flex-col gap-3">
+            <div className="panel-flush">
+              <div className="grid grid-cols-[1fr_auto_auto_auto_1fr_auto] gap-3 border-b border-border bg-muted/60 px-5 py-3 text-sm font-bold text-muted-2">
+                <span>Check</span>
+                <span>Kind</span>
+                <span>From photos</span>
+                <span>Importance</span>
+                <span>Allowed range</span>
                 <span className="sr-only">Actions</span>
               </div>
               {attributes.map((attr, i) => (
@@ -256,25 +253,25 @@ export function VerticalEditor({
                   isLast={i === attributes.length - 1}
                 />
               ))}
-              <div className="flex items-center justify-between px-4 py-3">
-                <span className={cn("text-xs", weightTotal === 1 ? "text-muted-2" : "text-warning")}>
-                  Weights sum to {Math.round(weightTotal * 100)}%{weightTotal !== 1 && " (should be 100%)"}
+              <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
+                <span className={cn("text-sm font-semibold", weightTotal === 1 ? "text-muted-2" : "text-warning")}>
+                  Importance adds up to {Math.round(weightTotal * 100)}%{weightTotal !== 1 && " — it should be 100%"}
                 </span>
                 <Button variant="outline" size="sm" onClick={addAttribute}>
                   <IconPlus />
-                  Add attribute
+                  Add a check
                 </Button>
               </div>
             </div>
           </TabsContent>
 
-          <TabsContent value="pricing" className="flex flex-col gap-4">
-            <div className="rounded-2xl border border-border-muted bg-surface p-4">
-              <h3 className="text-sm font-semibold text-heading">Grade adjustments</h3>
-              <p className="mt-0.5 text-xs text-body">
-                Percentage applied to the base market price for each grade.
+          <TabsContent value="pricing" className="mt-2 grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <div className="panel">
+              <h3 className="panel-title">Price change by quality</h3>
+              <p className="panel-subtitle">
+                How much each grade adds to or takes off the market price, in %.
               </p>
-              <div className="mt-3 flex flex-col gap-2">
+              <div className="mt-4 flex flex-col gap-3">
                 {gradeAdjustments.map((adj, i) => (
                   <div key={adj._key} className="flex items-center gap-2">
                     <Input
@@ -289,7 +286,7 @@ export function VerticalEditor({
                         onChange={(e) => updateAdjustment(i, { adjustment_pct: Number(e.target.value) })}
                         className="w-20"
                       />
-                      <span className="text-xs text-muted-2">%</span>
+                      <span className="text-sm font-semibold text-muted-2">%</span>
                     </div>
                     <Button
                       variant="ghost"
@@ -297,7 +294,7 @@ export function VerticalEditor({
                       className="text-muted-2 hover:text-error"
                       onClick={() => setGradeAdjustments((prev) => prev.filter((_, j) => j !== i))}
                     >
-                      <IconTrash size={14} />
+                      <IconTrash size={18} />
                     </Button>
                   </div>
                 ))}
@@ -318,12 +315,12 @@ export function VerticalEditor({
               </div>
             </div>
 
-            <div className="rounded-2xl border border-border-muted bg-surface p-4">
-              <h3 className="text-sm font-semibold text-heading">Quantity tiers</h3>
-              <p className="mt-0.5 text-xs text-body">Bulk discount thresholds.</p>
-              <div className="mt-3 flex flex-col gap-2">
+            <div className="panel">
+              <h3 className="panel-title">Bulk discounts</h3>
+              <p className="panel-subtitle">A lower price per unit for bigger orders.</p>
+              <div className="mt-4 flex flex-col gap-3">
                 {quantityTiers.map((tier, i) => (
-                  <div key={tier._key} className="flex items-center gap-2 text-xs text-body">
+                  <div key={tier._key} className="flex items-center gap-2 text-sm font-medium text-body">
                     <span>At least</span>
                     <Input
                       type="number"
@@ -345,7 +342,7 @@ export function VerticalEditor({
                       className="text-muted-2 hover:text-error"
                       onClick={() => setQuantityTiers((prev) => prev.filter((_, j) => j !== i))}
                     >
-                      <IconTrash size={14} />
+                      <IconTrash size={18} />
                     </Button>
                   </div>
                 ))}
@@ -390,7 +387,7 @@ function AttributeRow({
   const switchId = useId();
 
   return (
-    <div className="grid grid-cols-[1fr_auto_auto_auto_1fr_auto] items-center gap-3 border-b border-border-muted px-4 py-2.5 last:border-b-0">
+    <div className="grid grid-cols-[1fr_auto_auto_auto_1fr_auto] items-center gap-3 border-b border-border px-5 py-3 last:border-b-0">
       <Input value={attribute.name} onChange={(e) => onChange({ name: e.target.value })} />
 
       <Select
@@ -401,9 +398,9 @@ function AttributeRow({
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="numeric">Numeric</SelectItem>
-          <SelectItem value="categorical">Categorical</SelectItem>
-          <SelectItem value="boolean">Boolean</SelectItem>
+          <SelectItem value="numeric">Number</SelectItem>
+          <SelectItem value="categorical">Choice</SelectItem>
+          <SelectItem value="boolean">Yes / no</SelectItem>
         </SelectContent>
       </Select>
 
@@ -420,9 +417,9 @@ function AttributeRow({
           max={100}
           value={Math.round(attribute.weight * 100)}
           onChange={(e) => onChange({ weight: Number(e.target.value) / 100 })}
-          className="w-16"
+          className="w-20"
         />
-        <span className="text-xs text-muted-2">%</span>
+        <span className="text-sm font-semibold text-muted-2">%</span>
       </div>
 
       <Input
@@ -433,13 +430,13 @@ function AttributeRow({
 
       <div className="flex items-center gap-0.5">
         <Button variant="ghost" size="icon-sm" disabled={isFirst} onClick={() => onMove(-1)}>
-          <IconArrowUp size={14} />
+          <IconArrowUp size={18} />
         </Button>
         <Button variant="ghost" size="icon-sm" disabled={isLast} onClick={() => onMove(1)}>
-          <IconArrowDown size={14} />
+          <IconArrowDown size={18} />
         </Button>
         <Button variant="ghost" size="icon-sm" className="text-muted-2 hover:text-error" onClick={onRemove}>
-          <IconTrash size={14} />
+          <IconTrash size={18} />
         </Button>
       </div>
     </div>
@@ -459,35 +456,35 @@ function VerticalPreview({
   const topGrade = gradeAdjustments[0];
 
   return (
-    <div className="rounded-2xl border border-border-muted bg-surface p-5">
-      <p className="text-xs font-medium text-muted-2">Sample listing preview</p>
+    <div className="panel">
+      <p className="text-sm font-semibold text-muted-2">How a listing will look</p>
       <div className="mt-3 flex items-center justify-between">
-        <h3 className="text-base font-semibold text-heading">
+        <h3 className="text-base font-bold text-heading">
           Sample {vertical.name} commodity
         </h3>
         {topGrade && (
-          <span className="rounded-full bg-brand-primary/15 px-2.5 py-1 text-xs font-medium text-brand-primary-glow">
+          <span className="rounded-full bg-brand-primary-muted px-2.5 py-1 text-xs font-bold text-brand-primary-hover">
             {topGrade.grade}
           </span>
         )}
       </div>
-      <ul className="mt-4 flex flex-col divide-y divide-border-muted">
+      <ul className="mt-4 flex flex-col divide-y divide-border">
         {attributes.map((attr) => (
-          <li key={attr._key} className="flex items-center justify-between py-2 text-sm">
+          <li key={attr._key} className="flex items-center justify-between py-3 text-[0.9375rem]">
             <span className="flex items-center gap-2 text-body">
               {attr.name || "Untitled attribute"}
               {attr.gradeable_by_ml && (
-                <span className="rounded-full bg-brand-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-brand-primary-glow">
-                  AI-graded
+                <span className="rounded-full bg-brand-primary-muted px-2 py-0.5 text-xs font-bold text-brand-primary-hover">
+                  From photos
                 </span>
               )}
             </span>
-            <span className="text-xs text-muted-2">{attr.range || "—"}</span>
+            <span className="text-sm text-muted-2">{attr.range || "—"}</span>
           </li>
         ))}
       </ul>
       {topGrade && (
-        <p className="mt-4 border-t border-border-muted pt-3 text-sm text-body">
+        <p className="mt-4 border-t border-border pt-3 text-sm text-body">
           Base price ₹{basePrice.toLocaleString("en-IN")} → adjusted{" "}
           <span className="font-semibold text-heading">
             ₹{Math.round(basePrice * (1 + topGrade.adjustment_pct / 100)).toLocaleString("en-IN")}

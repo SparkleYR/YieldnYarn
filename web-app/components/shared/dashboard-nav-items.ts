@@ -35,15 +35,15 @@ export const BUYER_NAV_ITEMS: DashboardNavItem[] = [
 ];
 
 export const ADMIN_NAV_ITEMS: DashboardNavItem[] = [
-  { label: "Dashboard", href: "/admin/dashboard", icon: IconLayoutDashboard },
-  { label: "Verticals", href: "/admin/verticals", icon: IconAdjustmentsHorizontal },
-  { label: "Verification", href: "/admin/verification", icon: IconShieldCheck },
-  { label: "Disputes", href: "/admin/disputes", icon: IconGavel },
-  { label: "Users", href: "/admin/users", icon: IconUsers },
-  { label: "Pricing", href: "/admin/pricing", icon: IconCurrencyRupee },
+  { label: "Home", href: "/admin/dashboard", icon: IconLayoutDashboard },
+  { label: "Categories", href: "/admin/verticals", icon: IconAdjustmentsHorizontal },
+  { label: "Quality checks", href: "/admin/verification", icon: IconShieldCheck },
+  { label: "Complaints", href: "/admin/disputes", icon: IconGavel },
+  { label: "People", href: "/admin/users", icon: IconUsers },
+  { label: "Market prices", href: "/admin/pricing", icon: IconCurrencyRupee },
 ];
 
 export const VERIFIER_NAV_ITEMS: DashboardNavItem[] = [
-  { label: "Dashboard", href: "/verifier/dashboard", icon: IconLayoutDashboard },
-  { label: "Verification Queue", href: "/verifier/queue", icon: IconClipboardCheck },
+  { label: "Home", href: "/verifier/dashboard", icon: IconLayoutDashboard },
+  { label: "Photos to check", href: "/verifier/queue", icon: IconClipboardCheck },
 ];

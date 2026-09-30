@@ -46,7 +46,7 @@ test.describe("Registration and login", () => {
 
     // Next.js's own route announcer (`#__next-route-announcer__`) also has
     // role="alert", so scope past it rather than using getByRole("alert").
-    await expect(page.locator('p[role="alert"]')).toHaveText("Incorrect email or password.");
+    await expect(page.locator('p[role="alert"]')).toHaveText("That email or password is not right. Please check and try again.");
     await expect(page).toHaveURL(/\/login/);
   });
 });

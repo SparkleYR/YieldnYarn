@@ -5,6 +5,7 @@ import { toast } from "sonner";
 
 import { ApiError, listDisputes, updateDispute, type Dispute, type DisputeStatus } from "@/lib/api";
 import { getStoredTokens } from "@/lib/auth";
+import { PageHeader, PanelHead } from "@/components/shared/page-header";
 import { StatTile } from "@/components/shared/stat-tile";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Button } from "@/components/ui/button";
@@ -97,56 +98,57 @@ export default function AdminDisputesPage() {
 
   if (error) {
     return (
-      <div className="rounded-2xl border border-border-muted bg-surface p-8 text-center text-sm text-body">
+      <div className="state-box">
         {error}
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="page">
+      <PageHeader title="Complaints" subtitle="Problems buyers and sellers reported on orders. Talk to both sides, then close it with a note." />
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <StatTile label="Open disputes" value={loading ? "…" : String(open.length)} />
+        <StatTile label="Open" value={loading ? "…" : String(open.length)} hint="Need someone to handle them" />
         <StatTile
-          label="Resolved"
+          label="Solved"
           value={loading ? "…" : String(disputes.filter((d) => d.status === "RESOLVED").length)}
+          hint="Closed with a note"
         />
-        <StatTile label="Total" value={loading ? "…" : String(disputes.length)} />
+        <StatTile label="All complaints" value={loading ? "…" : String(disputes.length)} hint="Since the start" />
       </div>
 
-      <div className="rounded-2xl border border-border-muted bg-surface">
-        <div className="border-b border-border-muted p-5">
-          <h2 className="text-sm font-semibold text-heading">Disputes</h2>
-        </div>
+      <div className="panel-flush">
+        <PanelHead title="All complaints" />
         <Table>
           <TableHeader>
-            <TableRow className="border-border-muted hover:bg-transparent">
-              <TableHead className="pl-5">Order</TableHead>
-              <TableHead>Raised by</TableHead>
-              <TableHead>Reason</TableHead>
+            <TableRow className="hover:bg-transparent">
+              <TableHead>Order</TableHead>
+              <TableHead>From</TableHead>
+              <TableHead>What happened</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead className="pr-5 text-right">Action</TableHead>
+              <TableHead className="text-right">Action</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading &&
               Array.from({ length: 3 }).map((_, i) => (
-                <TableRow key={i} className="border-border-muted hover:bg-transparent">
-                  <TableCell className="pl-5" colSpan={5}>
+                <TableRow key={i} className="border-border hover:bg-transparent">
+                  <TableCell colSpan={5}>
                     <Skeleton className="h-5 w-full" />
                   </TableCell>
                 </TableRow>
               ))}
             {!loading &&
               disputes.map((dispute) => (
-                <TableRow key={dispute.id} className="border-border-muted">
-                  <TableCell className="pl-5 font-medium text-heading">#{dispute.order}</TableCell>
-                  <TableCell className="text-body">{dispute.raised_by_name}</TableCell>
-                  <TableCell className="max-w-xs text-body">{dispute.description}</TableCell>
+                <TableRow key={dispute.id} className="border-border">
+                  <TableCell className="font-bold text-heading">#{dispute.order}</TableCell>
+                  <TableCell>{dispute.raised_by_name}</TableCell>
+                  <TableCell className="max-w-xs whitespace-normal">{dispute.description}</TableCell>
                   <TableCell>
                     <StatusBadge status={dispute.status} />
                   </TableCell>
-                  <TableCell className="pr-5 text-right">
+                  <TableCell className="text-right">
                     <Button
                       variant="outline"
                       size="sm"
@@ -156,15 +158,15 @@ export default function AdminDisputesPage() {
                         setNotes(dispute.resolution_notes);
                       }}
                     >
-                      Resolve
+                      Handle
                     </Button>
                   </TableCell>
                 </TableRow>
               ))}
             {!loading && disputes.length === 0 && (
-              <TableRow className="border-border-muted hover:bg-transparent">
-                <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-2">
-                  No disputes.
+              <TableRow className="hover:bg-transparent">
+                <TableCell colSpan={5} className="py-12 text-center text-base">
+                  No complaints so far.
                 </TableCell>
               </TableRow>
             )}
@@ -181,26 +183,26 @@ export default function AdminDisputesPage() {
           }
         }}
       >
-        <DialogContent className="sm:max-w-md">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>Order #{activeDispute?.order}</DialogTitle>
             <DialogDescription>{activeDispute?.description}</DialogDescription>
           </DialogHeader>
           <Field>
-            <FieldLabel htmlFor="resolution-notes">Resolution notes</FieldLabel>
+            <FieldLabel htmlFor="resolution-notes">What was done</FieldLabel>
             <Textarea
               id="resolution-notes"
-              placeholder="Summarize how this dispute was resolved…"
+              placeholder="e.g. Seller sent the missing 2 quintal on 3 Oct."
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
             />
           </Field>
           <DialogFooter>
             <Button variant="destructive" onClick={() => resolve("ESCALATED")} disabled={saving}>
-              Escalate
+              Send to senior staff
             </Button>
             <Button onClick={() => resolve("RESOLVED")} disabled={saving || notes.trim().length === 0}>
-              Mark resolved
+              Mark as solved
             </Button>
           </DialogFooter>
         </DialogContent>

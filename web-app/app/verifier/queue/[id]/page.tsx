@@ -62,7 +62,7 @@ export default function VerifierQueueDetailPage() {
 
   if (error) {
     return (
-      <div className="mx-auto max-w-4xl rounded-2xl border border-border-muted bg-surface p-8 text-center text-sm text-body">
+      <div className="state-box">
         {error}
       </div>
     );

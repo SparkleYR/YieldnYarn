@@ -25,19 +25,19 @@ export function DashboardSidebar({ items }: { items: DashboardNavItem[] }) {
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
-        <Link href="/" className="flex items-center gap-2 px-2 py-1.5">
-          <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-brand-primary/15 text-brand-primary-glow">
-            <IconLeaf size={16} stroke={2} />
+        <Link href="/" className="flex h-12 items-center gap-2.5 px-1.5">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-brand-primary text-white">
+            <IconLeaf size={20} stroke={2.2} />
           </span>
-          <span className="truncate text-sm font-semibold tracking-tight text-natural-white group-data-[collapsible=icon]:hidden">
+          <span className="truncate text-lg font-extrabold tracking-tight text-heading group-data-[collapsible=icon]:hidden">
             {SITE_NAME}
           </span>
         </Link>
       </SidebarHeader>
       <SidebarContent>
-        <SidebarGroup>
+        <SidebarGroup className="pt-2">
           <SidebarGroupContent>
-            <SidebarMenu>
+            <SidebarMenu className="gap-1">
               {items.map((item) => {
                 const isActive =
                   pathname === item.href || pathname.startsWith(`${item.href}/`);

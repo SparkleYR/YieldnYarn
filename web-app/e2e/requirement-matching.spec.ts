@@ -29,34 +29,35 @@ test("posting a requirement for an already-active listing matches it automatical
 
   await loginViaUi(page, verifier.email, verifier.password);
   await page.goto(`/verifier/queue/${listing.id}`);
-  await page.getByRole("button", { name: "Confirm AI Grade" }).click();
+  await page.getByRole("button", { name: "Approve", exact: true }).click();
   await expect(page).toHaveURL(/\/verifier\/queue$/);
 
   await loginViaUi(page, buyer.email, buyer.password);
   await page.goto("/buyer/requirements");
-  await page.getByRole("button", { name: "Post requirement" }).click();
+  await page.getByRole("button", { name: "Add what you need" }).click();
 
-  await page.getByLabel("Vertical").click();
+  await page.getByLabel("Category").click();
   await page.getByRole("option", { name: "Agriculture" }).click();
-  await page.getByLabel("Commodity").fill(commodityName);
+  await page.getByLabel("Crop or product").fill(commodityName);
   await page.getByLabel("Quantity").fill("10");
   // The deterministic grading stub always scores 0.75 confidence per
   // ML-gradeable attribute regardless of the attribute weights/names (see
   // backend-fastapi/grading/pipeline.py:_stub_result), which lands in the
   // "Grade B" band (0.65–0.85) — not "Grade A" — so the min_grade filter
   // has to be set to something the stub can actually satisfy.
-  await page.getByLabel("Min. grade").fill("Grade B");
-  await page.getByLabel("Max price (₹)").fill("5000");
-  await page.getByLabel("Region").fill("Rajasthan");
-  await page.getByRole("button", { name: "Post requirement", exact: true }).click();
+  await page.getByLabel("Lowest quality you accept").click();
+  await page.getByRole("option", { name: "Grade B — good" }).click();
+  await page.getByLabel("Highest price per unit (₹)").fill("5000");
+  await page.getByLabel("Place").fill("Rajasthan");
+  await page.getByRole("button", { name: "Save and find sellers" }).click();
 
-  await expect(page.getByText("Requirement posted.")).toBeVisible();
+  await expect(page.getByText("Saved. We are looking for sellers.")).toBeVisible();
   // The post-requirement dialog fires the match trigger immediately after
   // creation. Wait for the success toast (unambiguous) rather than the
   // "Matched" status badge text, which also substring-matches the toast
   // itself while it's still on screen.
-  await expect(page.getByText(/^Matched — order #\d+ created\.$/)).toBeVisible({ timeout: 10_000 });
-  await expect(page.getByText("Matched", { exact: true })).toBeVisible();
+  await expect(page.getByText(/^Seller found — order #\d+ created\.$/)).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByText("Seller found", { exact: true })).toBeVisible();
 
   await page.goto("/buyer/notifications");
   await expect(page.getByText("Requirement matched")).toBeVisible();

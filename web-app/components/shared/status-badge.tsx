@@ -1,51 +1,40 @@
+"use client";
+
+import { useT } from "@/lib/i18n";
+import type { MessageKey } from "@/lib/i18n/messages";
 import { cn } from "@/lib/utils";
 
-const STATUS_STYLES: Record<string, string> = {
-  // good
-  ACTIVE: "text-success",
-  CONFIRMED: "text-success",
-  FULFILLED: "text-success",
-  MATCHED: "text-success",
-  ACCEPTED: "text-success",
-  // pending / neutral-warm
-  PENDING: "text-warning",
-  PENDING_GRADING: "text-warning",
-  PENDING_VERIFICATION: "text-warning",
-  OPEN: "text-warning",
-  UNDER_REVIEW: "text-warning",
-  DRAFT: "text-muted-2",
-  // resolved-neutral
-  SOLD: "text-info",
-  RESOLVED: "text-info",
-  COUNTERED: "text-info",
-  // bad
-  CANCELLED: "text-error",
-  DISPUTED: "text-error",
-  EXPIRED: "text-error",
-  ESCALATED: "text-error",
-  REJECTED: "text-error",
+type Tone = "good" | "wait" | "info" | "bad" | "neutral";
+
+const STATUS_TONE: Record<string, Tone> = {
+  ACTIVE: "good",
+  CONFIRMED: "good",
+  FULFILLED: "good",
+  MATCHED: "good",
+  ACCEPTED: "good",
+  DELIVERED: "good",
+  PENDING: "wait",
+  PENDING_GRADING: "wait",
+  PENDING_VERIFICATION: "wait",
+  OPEN: "wait",
+  UNDER_REVIEW: "wait",
+  SOLD: "info",
+  RESOLVED: "info",
+  COUNTERED: "info",
+  DRAFT: "neutral",
+  CANCELLED: "bad",
+  DISPUTED: "bad",
+  EXPIRED: "bad",
+  ESCALATED: "bad",
+  REJECTED: "bad",
 };
 
-const STATUS_DOT: Record<string, string> = {
-  ACTIVE: "bg-success",
-  CONFIRMED: "bg-success",
-  FULFILLED: "bg-success",
-  MATCHED: "bg-success",
-  ACCEPTED: "bg-success",
-  PENDING: "bg-warning",
-  PENDING_GRADING: "bg-warning",
-  PENDING_VERIFICATION: "bg-warning",
-  OPEN: "bg-warning",
-  UNDER_REVIEW: "bg-warning",
-  DRAFT: "bg-muted-2",
-  SOLD: "bg-info",
-  RESOLVED: "bg-info",
-  COUNTERED: "bg-info",
-  CANCELLED: "bg-error",
-  DISPUTED: "bg-error",
-  EXPIRED: "bg-error",
-  ESCALATED: "bg-error",
-  REJECTED: "bg-error",
+const TONE_CLASS: Record<Tone, { text: string; pill: string; dot: string }> = {
+  good: { text: "text-success", pill: "bg-success/10", dot: "bg-success" },
+  wait: { text: "text-warning", pill: "bg-warning/10", dot: "bg-warning" },
+  info: { text: "text-info", pill: "bg-info/10", dot: "bg-info" },
+  bad: { text: "text-error", pill: "bg-error/10", dot: "bg-error" },
+  neutral: { text: "text-muted-2", pill: "bg-muted", dot: "bg-muted-2" },
 };
 
 function formatStatus(status: string) {
@@ -56,34 +45,34 @@ function formatStatus(status: string) {
     .join(" ");
 }
 
-/** Status is always paired with a label, never color alone. */
-export function StatusBadge({ status }: { status: string }) {
-  const textClass = STATUS_STYLES[status] ?? "text-muted-2";
-  const dotClass = STATUS_DOT[status] ?? "bg-muted-2";
-
+function Pill({ tone, label }: { tone: Tone; label: string }) {
+  const c = TONE_CLASS[tone];
   return (
-    <span className={cn("inline-flex items-center gap-1.5 text-xs font-medium", textClass)}>
-      <span className={cn("size-1.5 rounded-full", dotClass)} />
-      {formatStatus(status)}
+    <span
+      className={cn(
+        "inline-flex h-7 w-fit shrink-0 items-center gap-1.5 rounded-full px-2.5 text-xs font-bold whitespace-nowrap",
+        c.pill,
+        c.text
+      )}
+    >
+      <span className={cn("size-2 rounded-full", c.dot)} aria-hidden />
+      {label}
     </span>
   );
 }
 
-const PRIORITY_STYLES: Record<string, string> = {
-  HIGH: "text-error",
-  MEDIUM: "text-warning",
-  LOW: "text-muted-2",
-};
+/** Status in plain words (translated), always a label and never colour alone. */
+export function StatusBadge({ status }: { status: string }) {
+  const t = useT();
+  const key = `status.${status}` as MessageKey;
+  const translated = t(key);
+  const label = translated === key ? formatStatus(status) : translated;
+  return <Pill tone={STATUS_TONE[status] ?? "neutral"} label={label} />;
+}
 
-/** Same paired dot+label treatment as StatusBadge, for queue priority. */
+const PRIORITY_TONE: Record<string, Tone> = { HIGH: "bad", MEDIUM: "wait", LOW: "neutral" };
+
+/** Same pill treatment as StatusBadge, for the checking queue's priority. */
 export function PriorityBadge({ priority }: { priority: string }) {
-  const textClass = PRIORITY_STYLES[priority] ?? "text-muted-2";
-  const dotClass = STATUS_DOT[priority === "HIGH" ? "CANCELLED" : priority === "MEDIUM" ? "PENDING" : "DRAFT"];
-
-  return (
-    <span className={cn("inline-flex items-center gap-1.5 text-xs font-medium", textClass)}>
-      <span className={cn("size-1.5 rounded-full", dotClass)} />
-      {formatStatus(priority)}
-    </span>
-  );
+  return <Pill tone={PRIORITY_TONE[priority] ?? "neutral"} label={formatStatus(priority)} />;
 }

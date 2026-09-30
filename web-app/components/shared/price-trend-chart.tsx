@@ -103,7 +103,7 @@ export function PriceTrendChart({
               y={tick.y}
               textAnchor="end"
               dominantBaseline="middle"
-              className="fill-muted-2 text-[9px]"
+              className="fill-muted-2 text-[11px] font-semibold"
             >
               {Math.round(tick.value)}
             </text>
@@ -111,21 +111,21 @@ export function PriceTrendChart({
         ))}
 
         {/* area wash */}
-        <path d={areaPath} fill="#10B981" fillOpacity={0.1} stroke="none" />
+        <path d={areaPath} fill="#047857" fillOpacity={0.1} stroke="none" />
 
         {/* line */}
         <path
           d={linePath}
           fill="none"
-          stroke="#10B981"
+          stroke="#047857"
           strokeWidth={2}
           strokeLinecap="round"
           strokeLinejoin="round"
         />
 
         {/* end marker */}
-        <circle cx={last.x} cy={last.y} r={4} fill="#10B981" stroke="var(--color-surface)" strokeWidth={2} />
-        <text x={last.x} y={last.y - 12} textAnchor="end" className="fill-heading text-[10px] font-semibold">
+        <circle cx={last.x} cy={last.y} r={4} fill="#047857" stroke="var(--color-surface)" strokeWidth={2} />
+        <text x={last.x} y={last.y - 12} textAnchor="end" className="fill-heading text-xs font-bold">
           {unit} {last.price.toLocaleString("en-IN")}
         </text>
 
@@ -144,7 +144,7 @@ export function PriceTrendChart({
               cx={hovered.x}
               cy={hovered.y}
               r={4}
-              fill="#10B981"
+              fill="#047857"
               stroke="var(--color-surface)"
               strokeWidth={2}
             />
@@ -165,7 +165,7 @@ export function PriceTrendChart({
 
       {hovered && (
         <div
-          className="pointer-events-none absolute top-2 flex -translate-x-1/2 flex-col gap-0.5 rounded-lg border border-border-muted bg-neutral-950 px-2.5 py-1.5 text-xs shadow-lg"
+          className="pointer-events-none absolute top-2 flex -translate-x-1/2 flex-col gap-0.5 rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-lg"
           style={{ left: `${(hovered.x / WIDTH) * 100}%` }}
         >
           <span className="text-muted-2">{hovered.date}</span>

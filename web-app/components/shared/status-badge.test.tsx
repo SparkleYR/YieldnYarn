@@ -4,17 +4,17 @@ import { describe, expect, it } from "vitest";
 import { PriorityBadge, StatusBadge } from "./status-badge";
 
 describe("StatusBadge", () => {
-  it("renders a human-readable label for a multi-word status", () => {
+  it("shows a plain-language label instead of the status code", () => {
     render(<StatusBadge status="PENDING_VERIFICATION" />);
-    expect(screen.getByText("Pending Verification")).toBeInTheDocument();
+    expect(screen.getByText("Quality check")).toBeInTheDocument();
   });
 
   it.each([
-    ["ACTIVE", "Active", "text-success"],
+    ["ACTIVE", "For sale", "text-success"],
     ["CONFIRMED", "Confirmed", "text-success"],
-    ["RESOLVED", "Resolved", "text-info"],
-    ["ESCALATED", "Escalated", "text-error"],
-    ["UNDER_REVIEW", "Under Review", "text-warning"],
+    ["RESOLVED", "Solved", "text-info"],
+    ["ESCALATED", "Sent to senior staff", "text-error"],
+    ["UNDER_REVIEW", "Being looked into", "text-warning"],
     ["OPEN", "Open", "text-warning"],
   ])("colors %s as %s", (status, label, expectedClass) => {
     render(<StatusBadge status={status} />);

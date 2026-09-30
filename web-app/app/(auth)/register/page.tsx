@@ -4,6 +4,7 @@ import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm, Controller } from "react-hook-form";
+import { IconBuildingStore, IconShoppingCart } from "@tabler/icons-react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 
@@ -18,22 +19,18 @@ import {
   FieldGroup,
   FieldLabel,
 } from "@/components/ui/field";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 
-const registerSchema = z.object({
-  display_name: z.string().min(1, "Enter your name"),
-  email: z.email("Enter a valid email address"),
-  password: z.string().min(8, "At least 8 characters"),
-  role: z.enum(["BUYER", "SELLER"]),
-});
+function makeSchema(t: ReturnType<typeof useT>) {
+  return z.object({
+    display_name: z.string().min(1, t("form.nameRequired")),
+    email: z.email(t("form.emailInvalid")),
+    password: z.string().min(8, t("auth.register.passwordHint")),
+    role: z.enum(["BUYER", "SELLER"]),
+  });
+}
 
-type RegisterValues = z.infer<typeof registerSchema>;
+type RegisterValues = z.infer<ReturnType<typeof makeSchema>>;
 
 export default function RegisterPage() {
   return (
@@ -54,9 +51,10 @@ function RegisterForm() {
     control,
     formState: { errors, isSubmitting },
   } = useForm<RegisterValues>({
-    resolver: zodResolver(registerSchema),
+    resolver: zodResolver(makeSchema(t)),
     defaultValues: {
-      role: searchParams.get("plan") ? "SELLER" : "BUYER",
+      // /register?role=seller from the "I want to sell" buttons on the site.
+      role: searchParams.get("role") === "seller" || searchParams.get("plan") ? "SELLER" : "BUYER",
     },
   });
 
@@ -76,9 +74,9 @@ function RegisterForm() {
   }
 
   return (
-    <div className="rounded-2xl border border-border-muted bg-surface p-8">
-      <h1 className="text-xl font-semibold text-heading">{t("auth.register.title")}</h1>
-      <p className="mt-1 text-sm text-body">{t("auth.register.subtitle")}</p>
+    <div className="panel sm:p-8">
+      <h1 className="page-title">{t("auth.register.title")}</h1>
+      <p className="page-subtitle">{t("auth.register.subtitle")}</p>
 
       <form onSubmit={handleSubmit(onSubmit)} className="mt-6">
         <FieldGroup>
@@ -118,40 +116,60 @@ function RegisterForm() {
           </Field>
 
           <Field data-invalid={!!errors.role}>
-            <FieldLabel htmlFor="role">{t("auth.register.role")}</FieldLabel>
+            <FieldLabel id="role-label">{t("auth.register.role")}</FieldLabel>
             <Controller
               control={control}
               name="role"
               render={({ field }) => (
-                <Select value={field.value} onValueChange={field.onChange}>
-                  <SelectTrigger id="role" className="w-full">
-                    <SelectValue placeholder={t("auth.register.selectRole")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="BUYER">{t("auth.register.buyer")}</SelectItem>
-                    <SelectItem value="SELLER">{t("auth.register.seller")}</SelectItem>
-                  </SelectContent>
-                </Select>
+                <div role="radiogroup" aria-labelledby="role-label" className="grid grid-cols-2 gap-3">
+                  {(
+                    [
+                      { value: "SELLER", icon: IconBuildingStore, title: t("auth.register.seller"), body: t("auth.register.sellerHint") },
+                      { value: "BUYER", icon: IconShoppingCart, title: t("auth.register.buyer"), body: t("auth.register.buyerHint") },
+                    ] as const
+                  ).map(({ value, icon: Icon, title, body }) => {
+                    const selected = field.value === value;
+                    return (
+                      <button
+                        key={value}
+                        type="button"
+                        role="radio"
+                        aria-checked={selected}
+                        onClick={() => field.onChange(value)}
+                        className={cn(
+                          "flex h-full flex-col items-start gap-2 rounded-xl border-2 p-4 text-left transition-colors",
+                          selected
+                            ? "border-brand-primary bg-brand-primary-muted"
+                            : "border-border bg-card hover:border-input"
+                        )}
+                      >
+                        <Icon size={24} className={selected ? "text-brand-primary" : "text-muted-2"} />
+                        <span className="text-base font-bold text-heading">{title}</span>
+                        <span className="text-sm text-body">{body}</span>
+                      </button>
+                    );
+                  })}
+                </div>
               )}
             />
             <FieldError errors={errors.role ? [errors.role] : undefined} />
           </Field>
 
           {formError && (
-            <p role="alert" className="text-sm text-error">
+            <p role="alert" className="rounded-xl bg-error/10 px-3.5 py-2.5 text-sm font-semibold text-error">
               {formError}
             </p>
           )}
 
-          <Button type="submit" disabled={isSubmitting} className="mt-2 w-full">
+          <Button type="submit" size="lg" disabled={isSubmitting} className="mt-1 w-full">
             {isSubmitting ? t("auth.register.submitting") : t("auth.register.submit")}
           </Button>
         </FieldGroup>
       </form>
 
-      <p className="mt-6 text-center text-sm text-body">
+      <p className="mt-6 text-center text-[0.9375rem] text-body">
         {t("auth.register.haveAccount")}{" "}
-        <Link href="/login" className="font-medium text-brand-primary-glow hover:underline">
+        <Link href="/login" className="font-bold text-brand-primary hover:underline">
           {t("auth.register.login")}
         </Link>
       </p>

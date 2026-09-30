@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 
 const schema = z.object({
-  email: z.email("Enter a valid email address"),
+  email: z.email("form.emailInvalid"),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -41,15 +41,15 @@ export default function ForgotPasswordPage() {
 
   if (sent) {
     return (
-      <div className="rounded-2xl border border-border-muted bg-surface p-8 text-center">
+      <div className="panel text-center sm:p-8">
         <IconCircleCheck size={32} className="mx-auto text-success" />
-        <h1 className="mt-3 text-xl font-semibold text-heading">{t("auth.forgot.sentTitle")}</h1>
-        <p className="mt-2 text-sm text-body">
+        <h1 className="page-title mt-3">{t("auth.forgot.sentTitle")}</h1>
+        <p className="page-subtitle">
           {t("auth.forgot.sentBody")}
         </p>
         <Link
           href="/login"
-          className="mt-6 inline-block text-sm font-medium text-brand-primary-glow hover:underline"
+          className="mt-6 inline-block text-sm font-medium text-brand-primary hover:underline"
         >
           {t("auth.forgot.back")}
         </Link>
@@ -58,9 +58,9 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <div className="rounded-2xl border border-border-muted bg-surface p-8">
-      <h1 className="text-xl font-semibold text-heading">{t("auth.forgot.title")}</h1>
-      <p className="mt-1 text-sm text-body">
+    <div className="panel sm:p-8">
+      <h1 className="page-title">{t("auth.forgot.title")}</h1>
+      <p className="page-subtitle">
         {t("auth.forgot.subtitle")}
       </p>
 
@@ -79,19 +79,19 @@ export default function ForgotPasswordPage() {
           </Field>
 
           {formError && (
-            <p role="alert" className="text-sm text-error">
+            <p role="alert" className="rounded-xl bg-error/10 px-3.5 py-2.5 text-sm font-semibold text-error">
               {formError}
             </p>
           )}
 
-          <Button type="submit" disabled={isSubmitting} className="mt-2 w-full">
+          <Button type="submit" size="lg" disabled={isSubmitting} className="mt-1 w-full">
             {isSubmitting ? t("auth.forgot.submitting") : t("auth.forgot.submit")}
           </Button>
         </FieldGroup>
       </form>
 
       <p className="mt-6 text-center text-sm text-body">
-        <Link href="/login" className="font-medium text-brand-primary-glow hover:underline">
+        <Link href="/login" className="font-medium text-brand-primary hover:underline">
           {t("auth.forgot.back")}
         </Link>
       </p>

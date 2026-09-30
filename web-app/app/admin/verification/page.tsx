@@ -10,6 +10,7 @@ import {
   type VerificationQueueItem,
 } from "@/lib/api";
 import { getStoredTokens } from "@/lib/auth";
+import { PageHeader, PanelHead } from "@/components/shared/page-header";
 import { StatTile } from "@/components/shared/stat-tile";
 import { PriorityBadge } from "@/components/shared/status-badge";
 import { ConfidenceBar } from "@/components/shared/confidence-bar";
@@ -70,7 +71,7 @@ export default function AdminVerificationPage() {
   async function handleResolve(item: VerificationQueueItem, action: ReviewAction, notes: string) {
     const token = getStoredTokens()?.access;
     if (!token) {
-      toast.error("You must be signed in as an admin to submit a review.");
+      toast.error("Please log in again to save your check.");
       return;
     }
     try {
@@ -81,71 +82,66 @@ export default function AdminVerificationPage() {
       );
       setItems((prev) => prev.filter((i) => i.listing_id !== item.listing_id));
       toast.success(
-        action === "CONFIRMED"
-          ? "AI grade confirmed."
-          : action === "OVERRIDDEN"
-            ? "Grade overridden."
-            : "Listing rejected."
+        action === "CONFIRMED" ? "Approved. It is now for sale." : "Sent back to the seller."
       );
       setActiveItem(null);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Failed to submit review.");
+      toast.error(err instanceof ApiError ? err.message : "Could not save. Please try again.");
     }
   }
 
   if (error) {
     return (
-      <div className="rounded-2xl border border-border-muted bg-surface p-8 text-center text-sm text-body">
+      <div className="state-box">
         {error}
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="page">
+      <PageHeader title="Quality checks" subtitle="Listings the photo check was not sure about. Open one, look at the photos, and confirm or correct the grade." />
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <StatTile label="Pending review" value={loading ? "…" : String(items.length)} />
-        <StatTile label="High priority" value={loading ? "…" : String(highPriority.length)} />
-        <StatTile label="Ungraded" value={loading ? "…" : String(ungraded.length)} />
+        <StatTile label="Waiting" value={loading ? "…" : String(items.length)} hint="Listings to look at" />
+        <StatTile label="Urgent" value={loading ? "…" : String(highPriority.length)} hint="Photo check was least sure" />
+        <StatTile label="No grade yet" value={loading ? "…" : String(ungraded.length)} hint="Photos could not be graded" />
       </div>
 
-      <div className="rounded-2xl border border-border-muted bg-surface">
-        <div className="border-b border-border-muted p-5">
-          <h2 className="text-sm font-semibold text-heading">Verification queue</h2>
-          <p className="text-xs text-body">Shared with the verifier console — highest priority first.</p>
-        </div>
+      <div className="panel-flush">
+        <PanelHead title="Waiting for a check" subtitle="Same list the checkers see. Most urgent first." />
         <Table>
           <TableHeader>
-            <TableRow className="border-border-muted hover:bg-transparent">
-              <TableHead className="pl-5">Listing</TableHead>
-              <TableHead>Vertical</TableHead>
+            <TableRow className="hover:bg-transparent">
+              <TableHead>Item</TableHead>
+              <TableHead>Category</TableHead>
               <TableHead>Priority</TableHead>
-              <TableHead>AI grade</TableHead>
-              <TableHead>Confidence</TableHead>
-              <TableHead className="pr-5 text-right">Review</TableHead>
+              <TableHead>Photo-check grade</TableHead>
+              <TableHead>How sure</TableHead>
+              <TableHead className="text-right">Check</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading &&
               Array.from({ length: 3 }).map((_, i) => (
-                <TableRow key={i} className="border-border-muted hover:bg-transparent">
-                  <TableCell className="pl-5" colSpan={6}>
+                <TableRow key={i} className="border-border hover:bg-transparent">
+                  <TableCell colSpan={6}>
                     <Skeleton className="h-5 w-full" />
                   </TableCell>
                 </TableRow>
               ))}
             {!loading &&
               sorted.map((item) => (
-                <TableRow key={item.listing_id} className="border-border-muted">
-                  <TableCell className="pl-5">
-                    <p className="font-medium text-heading">{item.commodity_name}</p>
-                    <p className="text-xs text-muted-2">{item.seller_name}</p>
+                <TableRow key={item.listing_id} className="border-border">
+                  <TableCell>
+                    <p className="font-bold text-heading">{item.commodity_name}</p>
+                    <p className="text-sm text-muted-2">{item.seller_name}</p>
                   </TableCell>
-                  <TableCell className="text-body capitalize">{item.vertical}</TableCell>
+                  <TableCell className="capitalize">{item.vertical}</TableCell>
                   <TableCell>
                     <PriorityBadge priority={item.priority} />
                   </TableCell>
-                  <TableCell className="text-body">{item.ai_grade ?? "Ungraded"}</TableCell>
+                  <TableCell className="font-semibold text-heading">{item.ai_grade ?? "No grade"}</TableCell>
                   <TableCell>
                     {item.ai_confidence !== null ? (
                       <ConfidenceBar value={item.ai_confidence} />
@@ -153,16 +149,16 @@ export default function AdminVerificationPage() {
                       <span className="text-xs text-muted-2">—</span>
                     )}
                   </TableCell>
-                  <TableCell className="pr-5 text-right">
+                  <TableCell className="text-right">
                     <Button variant="outline" size="sm" onClick={() => setActiveItem(item)}>
-                      Review
+                      Check
                     </Button>
                   </TableCell>
                 </TableRow>
               ))}
             {!loading && sorted.length === 0 && (
-              <TableRow className="border-border-muted hover:bg-transparent">
-                <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-2">
+              <TableRow className="hover:bg-transparent">
+                <TableCell colSpan={6} className="py-12 text-center text-base whitespace-normal">
                   Queue is empty.
                 </TableCell>
               </TableRow>

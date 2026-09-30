@@ -3,7 +3,7 @@
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { IconMapPin, IconUser } from "@tabler/icons-react";
+import { IconMapPin, IconSearch, IconUser } from "@tabler/icons-react";
 
 import { cn } from "@/lib/utils";
 import {
@@ -15,6 +15,9 @@ import {
 } from "@/lib/api";
 import { getStoredTokens } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
+import { formatQty } from "@/lib/format";
+import { CommodityIcon } from "@/components/shared/commodity-icon";
+import { PageHeader } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -117,24 +120,30 @@ function CatalogBrowser() {
 
   if (error) {
     return (
-      <div className="rounded-2xl border border-border-muted bg-surface p-8 text-center text-sm text-body">
+      <div className="state-box">
         {error}
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <Input
-          placeholder={t("catalog.search")}
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          className="h-9 sm:max-w-sm"
-        />
-        <div className="flex items-center gap-2">
+    <div className="page">
+      <PageHeader title={t("catalog.title")} subtitle={t("catalog.subtitle")} />
+
+      <div className="flex flex-col gap-3 md:flex-row md:items-center">
+        <div className="relative flex-1">
+          <IconSearch size={20} className="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-muted-2" />
+          <Input
+            placeholder={t("catalog.search")}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="pl-11"
+            aria-label={t("catalog.search")}
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-3 md:flex">
           <Select value={vertical} onValueChange={setVertical}>
-            <SelectTrigger className="w-40">
+            <SelectTrigger className="w-full md:w-48" aria-label={t("common.vertical")}>
               <SelectValue placeholder={t("common.vertical")} />
             </SelectTrigger>
             <SelectContent>
@@ -147,7 +156,7 @@ function CatalogBrowser() {
             </SelectContent>
           </Select>
           <Select value={sort} onValueChange={(v) => setSort(v as SortOption)}>
-            <SelectTrigger className="w-40">
+            <SelectTrigger className="w-full md:w-48" aria-label={t("catalog.sort")}>
               <SelectValue placeholder={t("catalog.sort")} />
             </SelectTrigger>
             <SelectContent>
@@ -160,85 +169,74 @@ function CatalogBrowser() {
       </div>
 
       {loading ? (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton key={i} className="h-48 rounded-2xl" />
+        <div className="grid-cards">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} className="h-56 rounded-2xl" />
           ))}
         </div>
       ) : visible.length === 0 ? (
-        <p className="rounded-2xl border border-dashed border-border-muted p-12 text-center text-sm text-body">
-          {t("catalog.empty")}
-        </p>
+        <p className="state-box border-dashed">{t("catalog.empty")}</p>
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid-cards">
           {visible.map((listing) => {
             const price = listingPrice(listing);
+            const place =
+              listing.region ||
+              (listing.location_lat !== null && listing.location_lng !== null
+                ? `${listing.location_lat.toFixed(2)}, ${listing.location_lng.toFixed(2)}`
+                : "");
             return (
               <Link
                 key={listing.id}
                 href={`/buyer/catalog/${listing.id}`}
-                className="flex flex-col rounded-2xl border border-border-muted bg-surface p-5 transition-colors hover:border-brand-primary/40"
+                className="panel flex h-full flex-col gap-4 transition-colors hover:border-brand-primary/60"
               >
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <p className="text-sm font-semibold text-heading">
-                      {listing.commodity_name}
-                      {listing.sub_category && (
-                        <span className="ml-1.5 font-normal text-muted-2">
-                          · {listing.sub_category}
-                        </span>
-                      )}
-                    </p>
-                    {listing.region ? (
-                      <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-2">
-                        <IconMapPin size={12} />
-                        {listing.region}
-                      </p>
-                    ) : (
-                      listing.location_lat !== null &&
-                      listing.location_lng !== null && (
-                        <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-2">
-                          <IconMapPin size={12} />
-                          {listing.location_lat.toFixed(2)}, {listing.location_lng.toFixed(2)}
-                        </p>
-                      )
-                    )}
+                <div className="flex items-start gap-3">
+                  <CommodityIcon vertical={verticalsById.get(listing.vertical)?.slug} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-lg font-bold text-heading">{listing.commodity_name}</p>
+                    <p className="truncate text-sm text-body">{listing.sub_category || "\u00a0"}</p>
                   </div>
                   <StatusBadge status={listing.status} />
                 </div>
 
-                <div className="mt-4 flex items-center gap-2">
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-2xl font-extrabold tracking-tight text-heading tabular-nums">
+                    ₹{price.toLocaleString(intlLocale)}
+                  </span>
+                  <span className="text-sm font-semibold text-muted-2">/ {listing.unit}</span>
                   <Badge
                     className={cn(
-                      listing.grade === null
-                        ? "bg-muted text-muted-2"
-                        : "bg-brand-primary/15 text-brand-primary-glow"
+                      "ml-auto",
+                      listing.grade === null ? "bg-muted text-muted-2" : "bg-brand-primary-muted text-brand-primary-hover"
                     )}
                   >
                     {listing.grade ?? t("catalog.ungraded")}
                   </Badge>
-                  {listing.grade !== null && listing.grade_confidence !== null && (
-                    <span className="text-xs text-muted-2">
-                      {t("catalog.confidence", { pct: Math.round(listing.grade_confidence * 100) })}
-                    </span>
-                  )}
                 </div>
 
-                <div className="mt-auto flex items-end justify-between pt-4">
-                  <div>
-                    <p className="text-lg font-semibold text-heading">
-                      ₹{price.toLocaleString(intlLocale)}
-                      <span className="text-xs font-normal text-muted-2"> /{listing.unit}</span>
-                    </p>
-                    <p className="text-xs text-muted-2">
-                      {t("catalog.available", { quantity: listing.quantity, unit: listing.unit })}
-                    </p>
+                <dl className="mt-auto grid grid-cols-1 gap-1.5 border-t border-border pt-4 text-sm">
+                  <div className="flex items-center justify-between gap-3">
+                    <dt className="text-muted-2">{t("catalog.availableLabel")}</dt>
+                    <dd className="font-bold text-heading">
+                      {formatQty(listing.quantity, intlLocale)} {listing.unit}
+                    </dd>
                   </div>
-                  <p className="flex items-center gap-1 text-xs text-body">
-                    <IconUser size={12} />
-                    {listing.seller_name}
-                  </p>
-                </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <dt className="flex items-center gap-1.5 text-muted-2">
+                      <IconMapPin size={16} />
+                      {t("common.region")}
+                    </dt>
+                    <dd className="truncate font-semibold text-heading">{place || "—"}</dd>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <dt className="flex items-center gap-1.5 text-muted-2">
+                      <IconUser size={16} />
+                      {t("common.seller")}
+                    </dt>
+                    <dd className="truncate font-semibold text-heading">{listing.seller_name}</dd>
+                  </div>
+                </dl>
               </Link>
             );
           })}
