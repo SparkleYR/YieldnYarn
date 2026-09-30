@@ -1,6 +1,8 @@
 package com.msme.seller.ui.auth
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Spacer
@@ -17,11 +19,10 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Agriculture
-import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -37,37 +38,46 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.msme.seller.R
 import com.msme.seller.ui.components.ErrorBanner
+import com.msme.seller.ui.components.Dimens
+import com.msme.seller.ui.components.LanguageToggle
+import com.msme.seller.ui.components.PrimaryButton
+import com.msme.seller.ui.components.currentAppLanguage
+import com.msme.seller.ui.components.setAppLanguage
 
 @Composable
 private fun AuthScaffold(title: String, subtitle: String, content: @Composable ColumnScope.() -> Unit) {
     Column(
         Modifier
             .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
             .systemBarsPadding()
             .imePadding()
             .verticalScroll(rememberScrollState())
-            .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+            .padding(Dimens.screen),
+        verticalArrangement = Arrangement.spacedBy(Dimens.gap),
     ) {
-        Spacer(Modifier.height(32.dp))
-        Icon(
-            Icons.Outlined.Agriculture,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(48.dp),
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Surface(color = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary, shape = MaterialTheme.shapes.small) {
+                Icon(Icons.Outlined.Agriculture, contentDescription = null, modifier = Modifier.padding(8.dp).size(28.dp))
+            }
+            Text(
+                stringResource(R.string.app_name),
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.padding(start = 10.dp).weight(1f),
+            )
+        }
+        LanguageToggle(selected = currentAppLanguage(), onSelect = ::setAppLanguage)
+        Spacer(Modifier.height(8.dp))
         Text(title, style = MaterialTheme.typography.headlineMedium)
         Text(subtitle, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(4.dp))
         content()
     }
 }
 
 @Composable
 private fun SubmitButton(text: String, busy: Boolean, enabled: Boolean, onClick: () -> Unit) {
-    Button(onClick = onClick, enabled = enabled, modifier = Modifier.fillMaxWidth().height(52.dp)) {
-        if (busy) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp) else Text(text)
-    }
+    PrimaryButton(text, onClick, enabled = enabled, busy = busy, modifier = Modifier.padding(top = 4.dp))
 }
 
 @Composable
@@ -96,7 +106,7 @@ fun LoginScreen(onRegister: () -> Unit, viewModel: AuthViewModel = hiltViewModel
         state.error?.let { ErrorBanner(it) }
         SubmitButton(stringResource(R.string.action_login), state.busy, viewModel.canLogin, viewModel::login)
         TextButton(onClick = onRegister, modifier = Modifier.align(Alignment.CenterHorizontally)) {
-            Text(stringResource(R.string.login_no_account))
+            Text(stringResource(R.string.login_no_account), style = MaterialTheme.typography.labelLarge)
         }
     }
 }
@@ -141,7 +151,7 @@ fun RegisterScreen(onLogin: () -> Unit, viewModel: AuthViewModel = hiltViewModel
         state.error?.let { ErrorBanner(it) }
         SubmitButton(stringResource(R.string.action_create_account), state.busy, viewModel.canRegister, viewModel::register)
         TextButton(onClick = onLogin, modifier = Modifier.align(Alignment.CenterHorizontally)) {
-            Text(stringResource(R.string.register_have_account))
+            Text(stringResource(R.string.register_have_account), style = MaterialTheme.typography.labelLarge)
         }
     }
 }

@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -12,18 +14,16 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Logout
+import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -33,7 +33,14 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.msme.seller.BuildConfig
 import com.msme.seller.R
+import com.msme.seller.ui.components.AppCard
+import com.msme.seller.ui.components.HelpText
+import com.msme.seller.ui.components.Dimens
 import com.msme.seller.ui.components.ErrorBanner
+import com.msme.seller.ui.components.IconBox
+import com.msme.seller.ui.components.LanguageToggle
+import com.msme.seller.ui.components.PrimaryButton
+import com.msme.seller.ui.components.SecondaryButton
 import com.msme.seller.ui.components.LoadingBox
 import com.msme.seller.ui.components.SectionTitle
 
@@ -46,11 +53,19 @@ fun ProfileScreen(contentPadding: PaddingValues, viewModel: ProfileViewModel = h
         return
     }
     Column(
-        Modifier.fillMaxSize().padding(contentPadding).verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        Modifier.fillMaxSize().padding(contentPadding).verticalScroll(rememberScrollState()).padding(Dimens.screen),
+        verticalArrangement = Arrangement.spacedBy(Dimens.gap),
     ) {
         state.user?.let {
-            Text(it.email, style = MaterialTheme.typography.titleMedium)
+            AppCard(modifier = Modifier.fillMaxWidth()) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconBox(Icons.Outlined.Person)
+                    Column(Modifier.padding(start = 12.dp)) {
+                        Text(state.displayName.ifBlank { it.email }, style = MaterialTheme.typography.titleMedium)
+                        Text(it.email, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
         }
         state.error?.let { ErrorBanner(it) }
         OutlinedTextField(
@@ -69,22 +84,19 @@ fun ProfileScreen(contentPadding: PaddingValues, viewModel: ProfileViewModel = h
             modifier = Modifier.fillMaxWidth(),
         )
         SectionTitle(stringResource(R.string.profile_language))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(selected = state.language == "en", onClick = { viewModel.onLanguage("en") }, label = { Text("English") })
-            FilterChip(selected = state.language == "hi", onClick = { viewModel.onLanguage("hi") }, label = { Text("हिन्दी") })
-        }
-        Button(onClick = viewModel::save, enabled = !state.saving, modifier = Modifier.fillMaxWidth()) {
-            Text(stringResource(if (state.savedOnce) R.string.profile_saved else R.string.action_save))
-        }
-        OutlinedButton(onClick = viewModel::requestLogout, modifier = Modifier.fillMaxWidth()) {
-            Icon(Icons.AutoMirrored.Outlined.Logout, contentDescription = null)
-            Text(stringResource(R.string.action_logout), Modifier.padding(start = 8.dp))
-        }
-        Text(
-            stringResource(R.string.profile_version, BuildConfig.VERSION_NAME),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        LanguageToggle(selected = state.language, onSelect = viewModel::onLanguage)
+        Spacer(Modifier.height(8.dp))
+        PrimaryButton(
+            stringResource(if (state.savedOnce) R.string.profile_saved else R.string.action_save),
+            onClick = viewModel::save,
+            busy = state.saving,
         )
+        SecondaryButton(
+            stringResource(R.string.action_logout),
+            onClick = viewModel::requestLogout,
+            icon = Icons.AutoMirrored.Outlined.Logout,
+        )
+        HelpText(stringResource(R.string.profile_version, BuildConfig.VERSION_NAME), Modifier.padding(top = 8.dp))
     }
 
     state.confirmLogout?.let { unsynced ->

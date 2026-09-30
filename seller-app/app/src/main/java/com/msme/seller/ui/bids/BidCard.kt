@@ -7,10 +7,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedCard
+import androidx.compose.material3.Surface
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -29,7 +27,11 @@ import com.msme.seller.core.bids.BidMath
 import com.msme.seller.core.format.Money
 import com.msme.seller.core.listing.ListingDraftValidator
 import com.msme.seller.core.model.Bid
+import com.msme.seller.ui.components.AppCard
+import com.msme.seller.ui.components.LabeledValue
 import com.msme.seller.ui.components.Pill
+import com.msme.seller.ui.components.PrimaryButton
+import com.msme.seller.ui.components.SecondaryButton
 import java.math.BigDecimal
 
 @Composable
@@ -47,53 +49,55 @@ fun BidCard(
     var countering by remember { mutableStateOf(false) }
     val unit = bid.unit.orEmpty()
 
-    OutlinedCard(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            if (showCommodity && bid.commodityName != null) {
-                Text(bid.commodityName.orEmpty(), style = MaterialTheme.typography.titleMedium)
-            }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(bid.buyerName ?: stringResource(R.string.bid_buyer_fallback), style = MaterialTheme.typography.titleSmall)
-                Pill(
-                    stringResource(bidStatusLabel(bid)),
-                    MaterialTheme.colorScheme.surfaceVariant,
-                    MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Text(
-                stringResource(
-                    R.string.bid_offer_line,
-                    Money.rupees(bid.offeredPrice),
-                    unit,
-                    Money.quantity(bid.offeredQuantity, unit),
-                ),
-                style = MaterialTheme.typography.bodyLarge,
-            )
-            Text(
-                stringResource(R.string.bid_total, Money.rupees(BidMath.total(bid))),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            BidMath.percentVsAsking(bid.offeredPrice, askingPrice)?.let { pct ->
-                Text(
-                    if (pct < 0) {
-                        stringResource(R.string.bid_below_asking, "%.1f".format(-pct))
-                    } else {
-                        stringResource(R.string.bid_above_asking, "%.1f".format(pct))
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (pct < 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                )
-            }
-            bid.message?.takeIf { it.isNotBlank() }?.let {
-                Text("“$it”", style = MaterialTheme.typography.bodyMedium)
-            }
-            if (actions.any) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
-                    Button(onClick = { confirmAccept = true }, enabled = !busy) { Text(stringResource(R.string.action_accept)) }
-                    OutlinedButton(onClick = { countering = true }, enabled = !busy) { Text(stringResource(R.string.action_counter)) }
-                    TextButton(onClick = onReject, enabled = !busy) { Text(stringResource(R.string.action_reject)) }
+    val scheme = MaterialTheme.colorScheme
+    val (pillBg, pillFg) = when {
+        bid.status == "PENDING" && bid.awaitingResponseFrom == "SELLER" -> scheme.secondaryContainer to scheme.onSecondaryContainer
+        bid.status == "ACCEPTED" -> scheme.primaryContainer to scheme.onPrimaryContainer
+        bid.status == "REJECTED" -> scheme.errorContainer to scheme.onErrorContainer
+        bid.status == "COUNTERED" -> scheme.tertiaryContainer to scheme.onTertiaryContainer
+        else -> scheme.surfaceVariant to scheme.onSurfaceVariant
+    }
+
+    AppCard(Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Column(Modifier.weight(1f)) {
+                if (showCommodity && bid.commodityName != null) {
+                    Text(bid.commodityName.orEmpty(), style = MaterialTheme.typography.titleMedium)
                 }
+                Text(
+                    bid.buyerName ?: stringResource(R.string.bid_buyer_fallback),
+                    style = if (showCommodity) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.titleSmall,
+                    color = if (showCommodity) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                )
+            }
+            Pill(stringResource(bidStatusLabel(bid)), pillBg, pillFg, Modifier.padding(start = 8.dp))
+        }
+        Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = MaterialTheme.shapes.small, modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+                LabeledValue(stringResource(R.string.bid_price_label), stringResource(R.string.price_per_unit, Money.rupees(bid.offeredPrice), unit))
+                LabeledValue(stringResource(R.string.field_quantity), Money.quantity(bid.offeredQuantity, unit))
+                LabeledValue(stringResource(R.string.bid_total_label), Money.rupees(BidMath.total(bid)))
+            }
+        }
+        BidMath.percentVsAsking(bid.offeredPrice, askingPrice)?.let { pct ->
+            Text(
+                if (pct < 0) {
+                    stringResource(R.string.bid_below_asking, "%.1f".format(-pct))
+                } else {
+                    stringResource(R.string.bid_above_asking, "%.1f".format(pct))
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (pct < 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+            )
+        }
+        bid.message?.takeIf { it.isNotBlank() }?.let {
+            Text("“$it”", style = MaterialTheme.typography.bodyLarge)
+        }
+        if (actions.any) {
+            PrimaryButton(stringResource(R.string.action_accept), onClick = { confirmAccept = true }, enabled = !busy, modifier = Modifier.padding(top = 4.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                SecondaryButton(stringResource(R.string.action_counter), onClick = { countering = true }, enabled = !busy, modifier = Modifier.weight(1f))
+                SecondaryButton(stringResource(R.string.action_reject), onClick = onReject, enabled = !busy, modifier = Modifier.weight(1f))
             }
         }
     }

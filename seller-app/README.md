@@ -1,4 +1,4 @@
-# seller-app — MSME Seller (Android)
+# seller-app — YieldnYarn seller app (Android)
 
 Kotlin/Jetpack Compose app for sellers: list produce (offline-first), get it graded, and
 handle buyers' bids. Implements `implementation_plan.md` §8 against the Django API.
