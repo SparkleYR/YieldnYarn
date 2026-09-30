@@ -15,6 +15,7 @@ import io
 import random
 from datetime import timedelta
 from decimal import Decimal
+from pathlib import Path
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -32,6 +33,9 @@ from orders.models import Bid, Order, OrderAllocation, Requirement
 from pricing.models import PricePoint
 
 User = get_user_model()
+# Public datasets cloned by ml-training/scripts/prepare_public_datasets.py.
+# Not committed (no clear licence to redistribute), so only used when present.
+DATASETS = Path(settings.BASE_DIR).parent / "ml-training" / "external"
 PASSWORD = "Demo@12345"
 DOMAIN = "demo.local"
 
@@ -66,6 +70,41 @@ MARKET_PRICES = {
 
 def _email(handle: str) -> str:
     return f"{handle}@{DOMAIN}"
+
+
+def _real_photo(commodity: str, seed: int, quality: float) -> bytes | None:
+    """A real photo from the public datasets, when they are on this machine:
+    the AgroAI wheat sample (the only whole-sample grain photo in it) and
+    TILDA fabric photos: clean cloth for good listings, visible defects for
+    poor ones."""
+    if commodity == "Wheat":
+        path = DATASETS / "agroai" / "test3.jpg"
+        return _shrink(path) if path.is_file() else None
+    labels = DATASETS / "tilda" / "labels"
+    if commodity not in ("Cotton fabric", "Denim") or not labels.is_dir():
+        return None
+
+    def boxes(label: Path) -> int:  # one defect box per line
+        return sum(1 for line in label.read_text().splitlines() if line.strip())
+
+    poor = quality < 0.8
+    stems = [label.stem for label in sorted(labels.glob("*.txt")) if (boxes(label) >= 2 if poor else boxes(label) == 0)]
+    if not stems:
+        return None
+    path = DATASETS / "tilda" / "photos" / f"{stems[seed % len(stems)]}.jpg"
+    return _shrink(path) if path.is_file() else None
+
+
+def _shrink(path: Path) -> bytes:
+    """Phone-sized JPEG, so demo uploads stay small."""
+    try:
+        from PIL import Image
+    except ImportError:
+        return path.read_bytes()
+    with Image.open(path) as image:
+        image = image.convert("RGB")
+        image.thumbnail((1200, 1200))
+        return _jpeg(image)
 
 
 def _grain_photo(seed: int, dirt: float) -> bytes | None:
@@ -181,7 +220,7 @@ class Command(BaseCommand):
             )
             listings[commodity] = listing
             quality = sum(scores.values()) / len(scores)
-            photo = (
+            photo = _real_photo(commodity, index, quality) or (
                 _grain_photo(index, dirt=max(0.0, 1 - quality) * 0.6)
                 if vertical == agriculture
                 else _fabric_photo(index, defects=round((1 - quality) * 20))
