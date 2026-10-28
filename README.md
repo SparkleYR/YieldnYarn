@@ -1,116 +1,144 @@
-# MSME Multi-Vertical Commodity Marketplace
+# YieldnYarn
 
-A pilot marketplace connecting MSME sellers (agriculture, textiles) with buyers, featuring
-AI-assisted quality grading, real-time price intelligence, and automated order matching.
+YieldnYarn is an academic B2B marketplace for small agricultural and textile suppliers. Sellers publish stock and evidence photos from Android; buyers inspect approved lots, estimate prices, negotiate offers, and combine available supply into bulk orders.
 
-See [`docs/MSME_Marketplace_Project_Document.md`](docs/MSME_Marketplace_Project_Document.md) and
-[`docs/MSME_Marketplace_Build_Plan.md`](docs/MSME_Marketplace_Build_Plan.md) for product context,
-and [`implementation_plan.md`](implementation_plan.md) / [`frontend_plan.md`](frontend_plan.md) for
-the full technical build plan this repository implements.
+Built by **Yash Raj (24BDS1209)** and **Aryan Raj (24BDS1094)** for Software Engineering, VIT Chennai.
 
-## Monorepo Layout
+![Buyer marketplace](docs/images/marketplace.jpg)
 
+## What it does
+
+- Seller Android application with local drafts, photo evidence, retryable uploads, and offer responses.
+- Buyer workspace for stock discovery, price estimates, requirements, negotiations, and order allocations.
+- AI quality suggestions with a human verification queue and retained decision history.
+- Configurable grading attributes, units, price adjustments, and quantity discounts for each vertical.
+- Administrator tools for categories, users, reference prices, and complaints.
+- English and Hindi web interfaces, in-app updates, and optional Firebase push.
+
+## Architecture
+
+```text
+Next.js buyer / verifier / admin website ──┐
+                                         ├── Django REST API ── PostgreSQL
+Kotlin seller app (Room + WorkManager) ────┘          │                │
+                                             FastAPI compute ────────┘
+                                             grading / pricing / allocation
 ```
-backend-django/   Django + DRF — auth, CRUD, admin, catalog, orders, disputes, notifications
-backend-fastapi/  FastAPI — ML grading, pricing intelligence, matching/allocation engine
-ml-training/      Grading model definition, dataset export, training + evaluation scripts
-web-app/          Next.js 16 — marketing site + buyer/admin/verifier dashboards (English/Hindi)
-seller-app/       Kotlin Android app for sellers (offline-first listing creation)
-infra/            Azure Bicep (infra/azure), load test, local Postgres init script
-docs/             Product & planning docs, OpenAPI schemas (docs/api), perf results (docs/perf)
-```
 
-## Quick start: whole stack in Docker
+Django owns schema migrations and marketplace transactions. FastAPI reads the shared schema through SQLAlchemy and handles grading, estimates, and allocation. Configure `COMPUTE_INTERNAL_TOKEN` in both services to protect internal operations. Evidence uses shared local storage in Compose; Azure infrastructure definitions provide a cloud deployment path.
 
-```bash
-docker compose --profile app up -d --build
-```
+| Directory | Responsibility |
+| --- | --- |
+| `backend-django/` | Django REST Framework, JWT authentication, listings, offers, orders, permissions |
+| `backend-fastapi/` | FastAPI grading, pricing, matching, scheduled price collection |
+| `web-app/` | Next.js 16, React 19, TypeScript, Tailwind CSS |
+| `seller-app/` | Kotlin, Jetpack Compose, Room, WorkManager |
+| `ml-training/` | Training code, model checkpoints, evaluation reports |
+| `infra/` | Local PostgreSQL and Azure Bicep infrastructure |
+| `docs/` | API contracts, performance results, design and demonstration guides |
+| `deliverables/` | Final report, earlier review, presentations, original lab submissions |
 
-This gives you the web app at http://localhost:3000, the API at http://localhost:8000/api (Swagger
-at `/api/docs/`) and the compute service at http://localhost:8001/compute. It runs the production
-images: Django migrates and seeds the Agriculture and Textiles verticals on start, and FastAPI
-includes the trained graders. Add `WITH_ML=false` for a small image without torch. If port 5432 is
-taken, set `DB_HOST_PORT`.
+## Run with Docker Compose
 
-## Local Development Setup
-
-### 1. Database (Docker)
+Install Git and Docker with Compose. From the repository root:
 
 ```bash
 cp .env.example .env
-docker compose up -d
+docker compose --profile app up -d --build
 ```
 
-> If your host kernel lacks `nf_tables`/`ip_tables` netfilter modules, Docker's daemon cannot
-> start (`iptables: Failed to initialize nft: Protocol not supported`). Run Docker on a host/VM
-> with those kernel modules available, or install PostgreSQL + PostGIS natively as a fallback.
-
-### 2. Django backend
+In PowerShell, use `Copy-Item .env.example .env` instead of `cp`. The first build downloads dependencies, including CPU inference libraries. Django migrates the database and seeds Agriculture and Textiles on startup. Create an administrator for your installation:
 
 ```bash
-cd backend-django
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+docker compose exec django python manage.py createsuperuser
+```
+
+| Service | Local address |
+| --- | --- |
+| Website | http://localhost:3000 |
+| Marketplace API documentation | http://localhost:8000/api/docs/ |
+| Compute health | http://localhost:8001/health |
+| PostgreSQL | `localhost:5432` |
+
+Set `DB_HOST_PORT` if port 5432 is occupied. Set `WITH_ML=false` to build without the inference dependencies. Stop services with `docker compose --profile app down`; database and evidence volumes remain available.
+
+Compose defaults are for local development. Configure secret keys, the internal service token, allowed hosts, HTTPS, and secure cookies before exposing a deployment.
+
+## Develop from source
+
+Install Python, Node.js with pnpm, and PostgreSQL with PostGIS. Copy `.env.example` to `.env`, configure its database connection, then start the database with `docker compose up -d db` or use a local PostgreSQL instance. Use separate virtual environments for the Python services.
+
+From `backend-django/`:
+
+```bash
+python -m pip install -r requirements.txt
 python manage.py migrate
-python manage.py seed_verticals        # Agriculture + Textiles, grading schemas, pricing rules
+python manage.py seed_verticals
 python manage.py createsuperuser
-python manage.py runserver 0.0.0.0:8000
+python manage.py runserver 127.0.0.1:8000
 ```
 
-### 3. FastAPI backend
+From `backend-fastapi/`, in another terminal:
 
 ```bash
-cd backend-fastapi
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-# optional, real ML grading with the bundled graders (CPU torch):
-pip install -r requirements-ml.txt --extra-index-url https://download.pytorch.org/whl/cpu
-uvicorn main:app --reload --port 8001
+python -m pip install -r requirements.txt
+python -m pip install -r requirements-ml.txt --extra-index-url https://download.pytorch.org/whl/cpu
+python -m uvicorn main:app --reload --port 8001
 ```
 
-### 4. Frontend
+From `web-app/`:
 
 ```bash
-cd web-app
-pnpm install
+pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-### 5. Seller Android app
+See each component README for configuration. The prepared Windows presentation environment also has [startup helpers and walkthroughs](docs/demo/README.md).
 
-Open `seller-app/` in Android Studio, or build via Gradle (needs the Android SDK):
+## Seller Android application
+
+Open `seller-app/` in Android Studio with the required Android SDK, or run:
 
 ```bash
 cd seller-app
 ./gradlew :app:installDebug
 ```
 
-The emulator reaches your machine's backends at `10.0.2.2`; for a physical phone, pass
-`-PsellerApiUrl=http://<your-LAN-IP>:8000/api/`. See [`seller-app/README.md`](seller-app/README.md)
-for offline sync, push notifications (Firebase) and tests.
+Use `gradlew.bat` on Windows. The emulator reaches the host at `10.0.2.2`. For a physical device, configure a reachable host address using `-PsellerApiUrl=http://HOST:8000/api/` and `-PsellerComputeUrl=http://HOST:8001/compute/`, or use USB forwarding. See the [Android README](seller-app/README.md) for configuration and tests.
 
-### 6. Optional integrations
+## Quality, prices, and allocation
 
-- **Agmarknet mandi prices:** FastAPI ingests prices every 6 hours from data.gov.in's Agmarknet
-  resource. It uses the public sample key (10 rows per call) until you set `AGMARKNET_API_KEY`
-  (free: register on data.gov.in, then My Account). agmarknet.gov.in itself has no API.
-- **Push notifications:** set `FIREBASE_CREDENTIALS_FILE` for Django and add
-  `seller-app/app/google-services.json`.
-- **Grading models:** graders for both verticals ship in `ml-training/checkpoints/`, and FastAPI uses
-  them once `requirements-ml.txt` is installed. See [`ml-training/README.md`](ml-training/README.md) for
-  the datasets, results and retraining.
+MobileNetV3-Small checkpoints support wheat-kernel and fabric-patch analysis. Recorded validation balanced accuracy is approximately 58% for wheat and 57% for fabric. Confidence caps keep the current models below the automatic approval threshold, so their results require verifier review. Photos do not establish physical moisture content or GSM. See [model preparation and evaluation](ml-training/README.md).
 
-## Tests
+Price estimates apply stored reference prices, grade multipliers, and quantity tiers. Local historical or manual records may be used; check their dates and sources. Allocation filters eligible active listings and takes cheaper stock first, retaining each seller's contribution to the order. Payments and carrier tracking are future integrations.
+
+Optional integrations include Agmarknet collection through a configured `AGMARKNET_API_KEY` and Firebase push through backend credentials plus Android `google-services.json`. Keep private configuration outside version control.
+
+## Validation
+
+Run commands from the named component directory:
 
 ```bash
-cd backend-django && python manage.py test          # needs Postgres
-cd backend-fastapi && pytest                        # needs Postgres with the Django schema
-cd web-app && pnpm test && pnpm test:e2e            # e2e needs the stack running on :3000/:8000/:8001
+# backend-fastapi: pure calculation tests, no database required
+python -m pytest tests/test_allocation.py tests/test_grade.py -q
+
+# backend-django: PostgreSQL required
+python manage.py test
+
+# backend-fastapi: full suite requires the migrated database
+python -m pytest
+
+# web-app: unit tests, then browser integration with all services running
+pnpm test
+pnpm test:e2e
 ```
 
-## CI / deployment
+GitHub Actions includes backend, frontend, Android, API contract, and container workflows. Azure deployment runs through the manual workflow; see [Azure setup](infra/azure/README.md).
 
-GitHub Actions (`.github/workflows/`) lint and test both backends and the web app on every push and PR.
-They also build and test the seller Android app, check the OpenAPI schemas in `docs/api/` for drift,
-and build the three Docker images. `deploy-azure.yml` is a manual deploy to Azure Container Apps; see
-[`infra/azure/README.md`](infra/azure/README.md).
+## Project documents
+
+- [Final project report](deliverables/Project_Final_Report_Template.docx)
+- [Review 1 report](deliverables/YieldnYarn_Review1_Report.docx)
+- [Original diagram submissions](deliverables/ALL%20DIAGRAMS%20ETC/)
+- [Project specification](docs/MSME_Marketplace_Project_Document.md)
+- [Build plan](docs/MSME_Marketplace_Build_Plan.md)

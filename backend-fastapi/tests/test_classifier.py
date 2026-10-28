@@ -54,8 +54,8 @@ def test_no_checkpoint_means_no_classifier(tmp_path, monkeypatch):
 
 def test_evidence_paths_resolve_against_the_django_media_root(monkeypatch):
     monkeypatch.setattr(db_module.settings, "DJANGO_MEDIA_ROOT", "/srv/media")
-    assert resolve_evidence_path("grading_evidence/listing_1/a.jpg") == "/srv/media/grading_evidence/listing_1/a.jpg"
-    assert resolve_evidence_path("/abs/a.jpg") == "/abs/a.jpg"
+    assert resolve_evidence_path("grading_evidence/listing_1/a.jpg") == str(Path("/srv/media") / "grading_evidence/listing_1/a.jpg")
+    assert resolve_evidence_path("/abs/a.jpg") == str(Path("/abs/a.jpg"))
 
 
 # --- real inference (requires requirements-ml.txt) ------------------------

@@ -53,3 +53,25 @@ pgdata/
 
 # --- Local machine setup notes (not shared) ---
 LOCAL_SETUP_TODO.md
+
+# Laptop demo runtime, logs, downloaded tools and APKs
+.demo/
+
+# Local document production and test output
+.docx-work/
+.final-report-work/
+.pytest_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage/
+playwright-report/
+test-results/
+*.tsbuildinfo
+seller-app/core/build/
+seller-app/.kotlin/
+seller-app/app/google-services.json
+firebase-service-account*.json
+.env.*
+!.env.example

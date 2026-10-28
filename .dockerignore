@@ -10,3 +10,15 @@ ml-training/data
 ml-training/external
 seller-app
 docs
+
+.demo
+.docx-work
+.final-report-work
+deliverables
+**/.pytest_cache
+**/.ruff_cache
+**/.env
+**/.env.*
+!**/.env.example
+**/google-services.json
+**/firebase-service-account*.json
